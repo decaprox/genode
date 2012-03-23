@@ -1,6 +1,7 @@
 /*
  * \brief  Platform-specific helper functions for the _main() function
  * \author Christian Prochaska
+ * \author Stefan Kalkowski
  * \date   2009-08-05
  */
 
@@ -21,15 +22,22 @@
 
 namespace Fiasco {
 #include <l4/sys/utcb.h>
-#include <l4/sys/kdebug.h>
 }
 
 enum { MAIN_THREAD_CAP_ID = 1 };
 
 static void main_thread_bootstrap() {
-	Fiasco::l4_utcb_tcr()->user[Fiasco::UTCB_TCR_BADGE]      = MAIN_THREAD_CAP_ID;
-	Fiasco::l4_utcb_tcr()->user[Fiasco::UTCB_TCR_THREAD_OBJ] = 0;
-	Genode::cap_map()->insert(MAIN_THREAD_CAP_ID, Fiasco::MAIN_THREAD_CAP);
+	/**
+	 * Unfortunately ldso calls this function twice. So the second time when
+	 * inserting the main thread's gate-capability an exception is raised.
+	 * Luckily the second time, when the exception is raised exception-handling
+	 * is already initialized by ldso.
+	 */
+	try {
+		Fiasco::l4_utcb_tcr()->user[Fiasco::UTCB_TCR_BADGE]      = MAIN_THREAD_CAP_ID;
+		Fiasco::l4_utcb_tcr()->user[Fiasco::UTCB_TCR_THREAD_OBJ] = 0;
+		Genode::cap_map()->insert(MAIN_THREAD_CAP_ID, Fiasco::MAIN_THREAD_CAP);
+	} catch (...) {}
 }
 
 
