@@ -147,11 +147,15 @@ void User_state::handle_event(Input::Event ev)
 	if (update_all) {
 
 		if (focused_view() && focused_view()->session())
-			_menubar->state(*this, focused_view()->session()->label(),
+		{
+			if (_menubar)
+				_menubar->state(*this, focused_view()->session()->label(),
 			                focused_view()->title(),
 			                focused_view()->session()->color());
+		}
 		else
-			_menubar->state(*this, "", "", BLACK);
+			if (_menubar)
+				_menubar->state(*this, "", "", BLACK);
 
 		update_all_views();
 	}
@@ -199,7 +203,8 @@ void User_state::forget(View *v)
 {
 	if (_focused_view == v) {
 		Mode::forget(v);
-		_menubar->state(*this, "", "", BLACK);
+		if (_menubar)
+			_menubar->state(*this, "", "", BLACK);
 		update_all_views();
 	}
 	if (_pointed_view == v)
