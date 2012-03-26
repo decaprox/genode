@@ -21,7 +21,7 @@ usage:
 	@echo "  <platform>   can be 'linux_x86', 'fiasco_x86', 'pistachio_x86',"
 	@echo "               'okl4_x86', 'nova_x86', 'codezero_vpb926',"
 	@echo "               'mb_s3a_starter_kit', foc_x86_32', 'foc_x86_64',"
-	@echo "               'foc_pbxa9', 'foc_vea9x4', or 'lx_hybrid_x86'"
+	@echo "               'foc_pbxa9', 'foc_vea9x4', 'foc_overo' or 'lx_hybrid_x86'"
 	@echo
 	@echo "  <build-dir>  is the location of the build directory to create"
 	@echo
@@ -102,7 +102,7 @@ $(BUILD_DIR)/Makefile:
 #
 # Add 'ports-foc' repository to Fiasco.OC build directory
 #
-ifeq ($(filter-out foc_x86_32 foc_pbxa9,$(PLATFORM)),)
+ifeq ($(filter-out foc_x86_32 foc_pbxa9 foc_overo,$(PLATFORM)),)
 $(BUILD_DIR)/etc/build.conf::
 	@cat $(BUILD_CONF).ports-foc >> $@
 endif
@@ -152,6 +152,9 @@ mb_ml507::
 lx_hybrid_x86::
 	@echo "CROSS_DEV_PREFIX =" > $(BUILD_DIR)/etc/tools.conf
 	@echo "SPECS += always_hybrid" >> $(BUILD_DIR)/etc/specs.conf
+
+foc_overo::
+	@echo "SPECS = genode foc_overo" > $(BUILD_DIR)/etc/specs.conf
 
 $(PLATFORM)::
 	@echo "successfully created build directory at $(BUILD_DIR)"
