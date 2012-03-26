@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/qt/fonts">
+        <file>helvetica_120_50.qpf</file>
+    </qresource>
+</RCC>
