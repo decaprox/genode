@@ -1,0 +1,128 @@
+#
+# Build
+#
+
+build {
+	core
+	init
+	drivers/input
+	drivers/framebuffer
+	drivers/timer
+	server/nitpicker
+	server/ts_input
+	app/ts_calibrate
+}
+
+create_boot_directory
+
+#
+# Generate config
+#
+
+set config {
+<config verbose="yes">
+	<parent-provides>
+		<service name="ROM"/>
+		<service name="RAM"/>
+		<service name="IRQ"/>
+		<service name="IO_MEM"/>
+		<service name="IO_PORT"/>
+		<service name="CAP"/>
+		<service name="PD"/>
+		<service name="RM"/>
+		<service name="CPU"/>
+		<service name="LOG"/>
+		<service name="SIGNAL"/>
+	</parent-provides>
+	<default-route>
+		<any-service> <parent/> <any-child/> </any-service>
+	</default-route>
+}
+
+append_if [have_spec omap3fb] config {
+	<start name="omap3fb_drv">
+		<resource name="RAM" quantum="2M"/>
+		<provides><service name="Framebuffer"/></provides>
+	</start>}
+
+append_if [have_spec ads7846] config {
+	<start name="ads7846_drv">
+		<resource name="RAM" quantum="2M"/>
+		<provides><service name="Input"/></provides>
+	</start>}
+
+append config {
+	<start name="timer">
+		<resource name="RAM" quantum="1M"/>
+		<provides><service name="Timer"/></provides>
+	</start>
+
+	<start name="ts_input">
+		<resource name="RAM" quantum="16M"/>
+		<provides>
+			<service name="Input"/>
+			<service name="Ts_input"/>
+		</provides>
+		<route>
+			<service name="Input">  <child name="ads7846_drv"/> </service>
+			<any-service> <parent/> <any-child/> </any-service>
+		</route>
+	</start>
+
+	<start name="nitpicker">
+		<resource name="RAM" quantum="1M"/>
+		<provides><service name="Nitpicker"/></provides>
+		<config menubar="off" mouse_cursor="on"/>
+		<route>
+			<service name="Input">  <child name="ts_input"/> </service>
+			<any-service> <parent/> <any-child/> </any-service>
+		</route>
+	</start>
+
+	<start name="ts_calibrate">
+		<resource name="RAM" quantum="80M"/>
+	</start>
+}
+
+append config {
+</config>
+}
+
+
+install_config $config
+
+#
+# Boot modules
+#
+
+# generic modules
+set boot_modules {
+	core
+	init
+	timer
+	nitpicker
+	ts_input
+	freetype.lib.so
+	ld.lib.so
+	libc.lib.so
+	libc_lock_pipe.lib.so
+	libm.lib.so
+	libpng.lib.so
+	qt_core.lib.so
+	qt_gui.lib.so
+	zlib.lib.so
+	jpeg.lib.so
+	ts_calibrate
+}
+
+#
+
+
+# platform-specific modules
+lappend_if [have_spec ads7846] boot_modules ads7846_drv
+lappend_if [have_spec omap3fb] boot_modules omap3fb_drv
+
+build_boot_image $boot_modules
+
+#run_genode_until forever
+
