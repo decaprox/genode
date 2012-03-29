@@ -34,6 +34,7 @@
 namespace Fiasco {
 #include <l4/sys/ipc.h>
 #include <l4/sys/consts.h>
+#include <l4/sys/cache.h>
 }
 
 namespace Genode

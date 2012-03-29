@@ -5,7 +5,7 @@
  */
 
 /*
- * Copyright 2012 Ksys Labs LLC 
+ * Copyright 2012 Ksys Labs LLC
  * Contact: <ivan.loskutov@ksyslabs.org>
  *
  * This file is part of the Genode OS framework, which is distributed
@@ -29,6 +29,8 @@
 #include <omap3fb_defs.h>
 #include <video_memory.h>
 
+
+unsigned char dummy;
 
 /***********************************************
  ** Implementation of the framebuffer service **
@@ -54,6 +56,8 @@ namespace Framebuffer
 			Genode::addr_t               _regs_base;
 			Genode::addr_t               _sys_regs_base;
 			Timer::Connection            _timer;
+
+			char                        *_fb_base;
 
 			enum {
 				GPIO_OE                         = 0x34,
@@ -340,6 +344,13 @@ namespace Framebuffer
 							;
 					}
 				}
+
+				_fb_base = env()->rm_session()->attach(_fb_ds, FRAMEBUFFER_SIZE, 0);
+			}
+
+			~Session_component()
+			{
+				Genode::env()->rm_session()->detach(_fb_base);
 			}
 
 			Genode::Dataspace_capability dataspace() { return _fb_ds_cap; }
@@ -350,7 +361,19 @@ namespace Framebuffer
 
 			void mode_sigh(Genode::Signal_context_capability) { }
 
-			void refresh(int x, int y, int w, int h) { }
+			void refresh(int x, int y, int w, int h) {
+#ifdef __FIASCO_OC__
+				unsigned long start_addr = (unsigned long)_fb_base + x*BYTES_PER_PIXEL + y*SCR_WIDTH*BYTES_PER_PIXEL;
+				unsigned long end_addr = start_addr + h*SCR_WIDTH*BYTES_PER_PIXEL + w*BYTES_PER_PIXEL;
+
+				enum { PREFETCH_STEP = 4096 };
+				for (Genode::size_t i = 0; i < FRAMEBUFFER_SIZE; i += PREFETCH_STEP)
+					dummy += _fb_base[i];
+				Fiasco::l4_cache_clean_data(start_addr, end_addr);
+				//Fiasco::l4_cache_clean_data((unsigned long)_fb_base, (unsigned long)_fb_base+FRAMEBUFFER_SIZE);
+				//PDBG("(%d,%d,%d,%d) clean cache %08lx-%08lx", x, y, w, h, start_addr, end_addr);
+#endif // __FIASCO_OC__
+			}
 	};
 
 
