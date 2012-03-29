@@ -8,7 +8,6 @@ build {
 	drivers/input
 	drivers/framebuffer
 	drivers/timer
-	drivers/pci
 	server/nitpicker
 	server/ts_input
 	app/qt_test
@@ -40,28 +39,6 @@ set config {
 	</default-route>
 }
 
-append_if [have_spec sdl] config {
-	<start name="fb_sdl">
-		<resource name="RAM" quantum="4M"/>
-		<provides>
-			<service name="Input"/>
-			<service name="Framebuffer"/>
-		</provides>
-	</start>}
-
-append_if [have_spec pci] config {
-	<start name="pci_drv">
-		<resource name="RAM" quantum="1M"/>
-		<provides><service name="PCI"/></provides>
-	</start>}
-
-append_if [have_spec vesa] config {
-	<start name="vesa_drv">
-		<resource name="RAM" quantum="1M"/>
-		<provides><service name="Framebuffer"/></provides>
-	</start>}
-
-
 append_if [have_spec omap3fb] config {
 	<start name="omap3fb_drv">
 		<resource name="RAM" quantum="2M"/>
@@ -71,11 +48,11 @@ append_if [have_spec omap3fb] config {
 		</config>
 	</start>}
 
-#append_if [have_spec ads7846] config {
-#	<start name="ads7846_drv">
-#		<resource name="RAM" quantum="1M"/>
-#		<provides><service name="Input"/></provides>
-#	</start>}
+append_if [have_spec ads7846] config {
+	<start name="ads7846_drv">
+		<resource name="RAM" quantum="1M"/>
+		<provides><service name="Input"/></provides>
+	</start>}
 
 append config {
 	<start name="timer">
@@ -85,12 +62,27 @@ append config {
 
 	<start name="ts_input">
 		<resource name="RAM" quantum="16M"/>
-		<provides><service name="Input"/></provides>
+		<config>
+			<pointercal value="8624 230 -2481496 66 -5154 18910104 65536"/>
+		</config>
+		<provides>
+			<service name="Input"/>
+			<service name="Ts_input"/>
+		</provides>
+		<route>
+			<service name="Input">  <child name="ads7846_drv"/> </service>
+			<any-service> <parent/> <any-child/> </any-service>
+		</route>
 	</start>
 
 	<start name="nitpicker">
 		<resource name="RAM" quantum="1M"/>
 		<provides><service name="Nitpicker"/></provides>
+		<config menubar="on" mouse_cursor="off"/>
+		<route>
+			<service name="Input">  <child name="ts_input"/> </service>
+			<any-service> <parent/> <any-child/> </any-service>
+		</route>
 	</start>
 
 	<start name="qt_test">
@@ -129,7 +121,6 @@ set boot_modules {
 	qt_test
 }
 
-#	
 
 
 # platform-specific modules
