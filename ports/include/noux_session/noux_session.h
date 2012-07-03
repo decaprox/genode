@@ -23,13 +23,15 @@
 
 namespace Noux {
 
+	using namespace Genode;
+
 	struct Session : Genode::Session
 	{
 		static const char *service_name() { return "Noux"; }
 
 		virtual ~Session() { }
 
-		virtual Genode::Dataspace_capability sysio_dataspace() = 0;
+		virtual Dataspace_capability sysio_dataspace() = 0;
 
 		enum Syscall {
 			SYSCALL_GETCWD,
@@ -42,6 +44,7 @@ namespace Noux {
 			SYSCALL_OPEN,
 			SYSCALL_CLOSE,
 			SYSCALL_IOCTL,
+			SYSCALL_LSEEK,
 			SYSCALL_DIRENT,
 			SYSCALL_FCHDIR,
 			SYSCALL_EXECVE,
@@ -49,6 +52,24 @@ namespace Noux {
 			SYSCALL_FORK,
 			SYSCALL_GETPID,
 			SYSCALL_WAIT4,
+			SYSCALL_PIPE,
+			SYSCALL_DUP2,
+			SYSCALL_UNLINK,
+			SYSCALL_RENAME,
+			SYSCALL_MKDIR,
+			SYSCALL_SOCKET,
+			SYSCALL_GETSOCKOPT,
+			SYSCALL_SETSOCKOPT,
+			SYSCALL_ACCEPT,
+			SYSCALL_BIND,
+			SYSCALL_LISTEN,
+			SYSCALL_SEND,
+			SYSCALL_SENDTO,
+			SYSCALL_RECV,
+			SYSCALL_GETPEERNAME,
+			SYSCALL_SHUTDOWN,
+			SYSCALL_CONNECT,
+			SYSCALL_GETADDRINFO,
 			SYSCALL_INVALID = -1
 		};
 
@@ -65,6 +86,7 @@ namespace Noux {
 			NOUX_DECL_SYSCALL_NAME(OPEN)
 			NOUX_DECL_SYSCALL_NAME(CLOSE)
 			NOUX_DECL_SYSCALL_NAME(IOCTL)
+			NOUX_DECL_SYSCALL_NAME(LSEEK)
 			NOUX_DECL_SYSCALL_NAME(DIRENT)
 			NOUX_DECL_SYSCALL_NAME(FCHDIR)
 			NOUX_DECL_SYSCALL_NAME(EXECVE)
@@ -72,6 +94,24 @@ namespace Noux {
 			NOUX_DECL_SYSCALL_NAME(FORK)
 			NOUX_DECL_SYSCALL_NAME(GETPID)
 			NOUX_DECL_SYSCALL_NAME(WAIT4)
+			NOUX_DECL_SYSCALL_NAME(PIPE)
+			NOUX_DECL_SYSCALL_NAME(DUP2)
+			NOUX_DECL_SYSCALL_NAME(UNLINK)
+			NOUX_DECL_SYSCALL_NAME(RENAME)
+			NOUX_DECL_SYSCALL_NAME(MKDIR)
+			NOUX_DECL_SYSCALL_NAME(SOCKET)
+			NOUX_DECL_SYSCALL_NAME(GETSOCKOPT)
+			NOUX_DECL_SYSCALL_NAME(SETSOCKOPT)
+			NOUX_DECL_SYSCALL_NAME(ACCEPT)
+			NOUX_DECL_SYSCALL_NAME(BIND)
+			NOUX_DECL_SYSCALL_NAME(LISTEN)
+			NOUX_DECL_SYSCALL_NAME(SEND)
+			NOUX_DECL_SYSCALL_NAME(SENDTO)
+			NOUX_DECL_SYSCALL_NAME(RECV)
+			NOUX_DECL_SYSCALL_NAME(GETPEERNAME)
+			NOUX_DECL_SYSCALL_NAME(SHUTDOWN)
+			NOUX_DECL_SYSCALL_NAME(CONNECT)
+			NOUX_DECL_SYSCALL_NAME(GETADDRINFO)
 			case SYSCALL_INVALID: return 0;
 			}
 			return 0;
@@ -92,7 +132,7 @@ namespace Noux {
 		 ** RPC declaration **
 		 *********************/
 
-		GENODE_RPC(Rpc_sysio_dataspace, Genode::Dataspace_capability, sysio_dataspace);
+		GENODE_RPC(Rpc_sysio_dataspace, Dataspace_capability, sysio_dataspace);
 		GENODE_RPC(Rpc_syscall, bool, syscall, Syscall);
 
 		GENODE_RPC_INTERFACE(Rpc_sysio_dataspace, Rpc_syscall);

@@ -71,6 +71,8 @@ namespace Genode {
 				return Fiasco::l4_fpage(_src_addr, _log2size, rights);
 			}
 
+			bool write_combined() const { return _write_combined; }
+
 			/**
 			 * Prepare map operation
 			 *
@@ -153,8 +155,8 @@ namespace Genode {
 			/**
 			 * Set destination for next reply
 			 */
-			void set_reply_dst(Native_capability pager_object) {
-				_last = pager_object.dst(); }
+			void set_reply_dst(Native_thread t) {
+				_last = t; }
 
 			/**
 			 * Answer call without sending a flex-page mapping

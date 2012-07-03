@@ -23,12 +23,19 @@ namespace Genode {
 	 */
 	Parent_capability parent_cap()
 	{
-		Native_capability cap;
-		memcpy(&cap, (void *)&_parent_cap, sizeof(cap));
+		Native_capability::Raw *raw = (Native_capability::Raw *)&_parent_cap;
 
-		/* assemble parent capability from object ID and Fiasco cap */
-		return reinterpret_cap_cast<Parent>(
-			Native_capability(Fiasco::PARENT_CAP, cap.local_name()));
+		static Cap_index *i = cap_map()->insert(raw->local_name,
+		                                        Fiasco::PARENT_CAP);
+
+		/*
+		 * Update local name after a parent capability got reloaded via
+		 * 'Platform_env::reload_parent_cap()'.
+		 */
+		if (i->id() != raw->local_name)
+			i->id(raw->local_name);
+
+		return reinterpret_cap_cast<Parent>(Native_capability(i));
 	}
 }
 

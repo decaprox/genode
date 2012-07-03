@@ -22,7 +22,7 @@
 
 /* Noux includes */
 #include <file_descriptor_registry.h>
-#include <vfs.h>
+#include <dir_file_system.h>
 #include <signal_dispatcher.h>
 #include <noux_session/capability.h>
 #include <args.h>
@@ -32,9 +32,6 @@
 #include <child_policy.h>
 
 namespace Noux {
-
-	using namespace Genode;
-
 
 	/**
 	 * Allocator for process IDs
@@ -90,6 +87,14 @@ namespace Noux {
 
 					/* trigger exit of main event loop */
 					init_process_exited();
+				} else {
+					/* destroy 'Noux::Child' */
+					destroy(env()->heap(), _child);
+
+					PINF("destroy %p", _child);
+					PINF("quota: avail=%zd, used=%zd",
+					     env()->ram_session()->avail(),
+					     env()->ram_session()->used());
 				}
 			}
 	};
@@ -110,7 +115,6 @@ namespace Noux {
 
 			void dispatch()
 			{
-				PINF("execve cleanup dispatcher called");
 				destroy(env()->heap(), _child);
 			}
 	};
@@ -191,7 +195,7 @@ namespace Noux {
 			 */
 			Environment _env;
 
-			Vfs * const _vfs;
+			Dir_file_system * const _root_dir;
 
 			/**
 			 * ELF binary
@@ -240,7 +244,23 @@ namespace Noux {
 						child->add_io_channel(io_channel_by_fd(fd), fd);
 			}
 
+			void _block_for_io_channel(Shared_pointer<Io_channel> &io)
+			{
+				Wake_up_notifier notifier(&_blocker);
+				io->register_wake_up_notifier(&notifier);
+				_blocker.down();
+				io->unregister_wake_up_notifier(&notifier);
+			}
+
+			/**
+			 * Method for handling noux network related system calls
+			 */
+
+			bool _syscall_net(Syscall sc);
+
 		public:
+
+			struct Binary_does_not_exist : Exception { };
 
 			/**
 			 * Constructor
@@ -249,12 +269,17 @@ namespace Noux {
 			 *                an executable binary (i.e., the init process,
 			 *                or children created via execve, or
 			 *                true if the child is a fork from another child
+			 *
+			 * \throw Binary_does_not_exist  if child is not a fork and the
+			 *                               specified name could not be
+			 *                               looked up at the virtual file
+			 *                               system
 			 */
 			Child(char const       *name,
 			      Family_member    *parent,
 			      int               pid,
 			      Signal_receiver  *sig_rec,
-			      Vfs              *vfs,
+			      Dir_file_system  *root_dir,
 			      Args              const &args,
 			      char const       *env,
 			      char const       *pwd,
@@ -274,9 +299,9 @@ namespace Noux {
 				_resources(name, resources_ep, false),
 				_args(ARGS_DS_SIZE, args),
 				_env(env),
-				_vfs(vfs),
+				_root_dir(root_dir),
 				_binary_ds(forked ? Dataspace_capability()
-				                  : vfs->dataspace_from_file(name)),
+				                  : root_dir->dataspace(name)),
 				_sysio_ds(Genode::env()->ram_session(), SYSIO_DS_SIZE),
 				_sysio(_sysio_ds.local_addr<Sysio>()),
 				_noux_session_cap(Session_capability(_entrypoint.manage(this))),
@@ -292,6 +317,11 @@ namespace Noux {
 			{
 				_env.pwd(pwd);
 				_args.dump();
+
+				if (!forked && !_binary_ds.valid()) {
+					PERR("Lookup of executable \"%s\" failed", name);
+					throw Binary_does_not_exist();
+				}
 			}
 
 			~Child()
@@ -301,7 +331,7 @@ namespace Noux {
 
 				_entrypoint.dissolve(this);
 
-				_vfs->release_dataspace_for_file(_child_policy.name(), _binary_ds);
+				_root_dir->release(_child_policy.name(), _binary_ds);
 			}
 
 			void start() { _entrypoint.activate(); }
@@ -309,11 +339,17 @@ namespace Noux {
 			void start_forked_main_thread(addr_t ip, addr_t sp, addr_t parent_cap_addr)
 			{
 				/* poke parent_cap_addr into child's address space */
-				Parent_capability const cap = _child.parent_cap();
-				_resources.rm.poke(parent_cap_addr, &cap, sizeof(cap));
+				Capability<Parent> const &cap = _child.parent_cap();
+				Capability<Parent>::Raw   raw = { cap.dst(), cap.local_name() };
+				_resources.rm.poke(parent_cap_addr, &raw, sizeof(raw));
 
 				/* start execution of new main thread at supplied trampoline */
 				_resources.cpu.start_main_thread(ip, sp);
+			}
+
+			void submit_exit_signal()
+			{
+				Signal_transmitter(_exit_context_cap).submit();
 			}
 
 			Ram_session_capability ram() const { return _resources.ram.cap(); }

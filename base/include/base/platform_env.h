@@ -46,7 +46,8 @@ namespace Genode {
 				Local_addr attach(Dataspace_capability ds,
 				                  size_t size = 0, off_t offset = 0,
 				                  bool use_local_addr = false,
-				                  Local_addr local_addr = (addr_t)0) {
+				                  Local_addr local_addr = (addr_t)0,
+				                  bool executable = false) {
 
 					bool try_again;
 					do {
@@ -54,7 +55,8 @@ namespace Genode {
 						try {
 							return Rm_session_client::attach(ds, size, offset,
 							                                 use_local_addr,
-							                                 local_addr);
+							                                 local_addr,
+							                                 executable);
 
 						} catch (Rm_session::Out_of_metadata) {
 
@@ -81,12 +83,12 @@ namespace Genode {
 				Expanding_ram_session_client(Ram_session_capability cap)
 				: Ram_session_client(cap), _cap(cap) { }
 
-				Ram_dataspace_capability alloc(size_t size) {
+				Ram_dataspace_capability alloc(size_t size, bool cached) {
 					bool try_again;
 					do {
 						try_again = false;
 						try {
-							return Ram_session_client::alloc(size);
+							return Ram_session_client::alloc(size, cached);
 
 						} catch (Ram_session::Out_of_metadata) {
 
@@ -154,7 +156,7 @@ namespace Genode {
 			 * meaningful capabilities obtained via its updated parent
 			 * capability.
 			 */
-			void reload_parent_cap(Capability<Parent>);
+			void reload_parent_cap(Native_capability::Dst, long);
 
 
 			/*******************

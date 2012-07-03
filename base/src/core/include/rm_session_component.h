@@ -244,8 +244,9 @@ namespace Genode {
 					/**
 					 * Constructor
 					 */
-					Rm_dataspace_component(Rm_session_component *rsc, size_t size) :
-						Dataspace_component(size, 0, false),
+					Rm_dataspace_component(Rm_session_component *rsc, size_t size)
+					:
+						Dataspace_component(size, 0, false, false, 0),
 						_rm_session_component(rsc) { _managed = true; }
 
 
@@ -342,7 +343,7 @@ namespace Genode {
 			 ** Region manager session interface **
 			 **************************************/
 
-			Local_addr       attach        (Dataspace_capability, size_t, off_t, bool, Local_addr);
+			Local_addr       attach        (Dataspace_capability, size_t, off_t, bool, Local_addr, bool);
 			void             detach        (Local_addr);
 			Pager_capability add_client    (Thread_capability);
 			void             fault_handler (Signal_context_capability handler);

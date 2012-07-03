@@ -83,6 +83,13 @@ void Ipc_pager::reply_and_wait_for_fault()
 
 	l4_umword_t grant   = _reply_mapping.grant() ? L4_MAP_ITEM_GRANT : 0;
 	l4_utcb_mr()->mr[0] = _reply_mapping.dst_addr() | L4_ITEM_MAP | grant;
+
+	/*
+	 * XXX Does L4_FPAGE_BUFFERABLE imply L4_FPAGE_UNCACHEABLE?
+	 */
+	if (_reply_mapping.write_combined())
+		l4_utcb_mr()->mr[0] |= L4_FPAGE_BUFFERABLE << 4;
+
 	l4_utcb_mr()->mr[1] = _reply_mapping.fpage().raw;
 
 	_tag = l4_ipc_send_and_wait(_last, l4_utcb(), snd_tag,
@@ -98,7 +105,7 @@ void Ipc_pager::reply_and_wait_for_fault()
 
 void Ipc_pager::acknowledge_wakeup()
 {
-	l4_cap_idx_t dst = Cap_dst_policy::valid(_last) ? _last : L4_SYSF_REPLY;
+	l4_cap_idx_t dst = Fiasco::Capability::valid(_last) ? _last : L4_SYSF_REPLY;
 
 	/* answer wakeup call from one of core's region-manager sessions */
 	l4_ipc_send(dst, l4_utcb(), l4_msgtag(0, 0, 0, 0), L4_IPC_SEND_TIMEOUT_0);
@@ -106,5 +113,5 @@ void Ipc_pager::acknowledge_wakeup()
 
 
 Ipc_pager::Ipc_pager()
-: Native_capability(Thread_base::myself()->tid(), 0), _badge(0) { }
+: Native_capability(cap_map()->find(Fiasco::l4_utcb_tcr()->user[Fiasco::UTCB_TCR_BADGE])), _badge(0) { }
 

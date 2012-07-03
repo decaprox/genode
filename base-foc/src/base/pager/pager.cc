@@ -55,14 +55,20 @@ void Pager_activation_base::entry()
 			continue;
 		}
 
+		/* lookup referenced object */
+		Pager_object *obj = _ep->obj_by_id(pager.badge());
+
+		/* the pager_object might be destroyed, while we got the message */
+		if (!obj) {
+			PWRN("No pager object found!");
+			continue;
+		}
+
 		switch (pager.msg_type()) {
 
 		case Ipc_pager::PAGEFAULT:
 		case Ipc_pager::EXCEPTION:
 			{
-				/* lookup referenced object */
-				Pager_object *obj = _ep->obj_by_id(pager.badge());
-
 				if (pager.is_exception()) {
 					Lock::Guard guard(obj->state.lock);
 					pager.copy_regs(&obj->state);
@@ -78,7 +84,7 @@ void Pager_activation_base::entry()
 					PDBG("Could not resolve pf=%p ip=%p",
 					     (void*)pager.fault_addr(), (void*)pager.fault_ip());
 				} else {
-					pager.set_reply_dst(Native_capability(obj->badge(),0));
+					pager.set_reply_dst(obj->badge());
 					reply_pending = true;
 					continue;
 				}
@@ -94,14 +100,9 @@ void Pager_activation_base::entry()
 				 * have to send a reply to the specified thread and answer the
 				 * call.
 				 */
-				Pager_object *obj = _ep->obj_by_id(pager.badge());
-				if (!obj) {
-					PWRN("Got illegal wake-up message from %lx", pager.badge());
-					continue;
-				}
 
 				/* send reply to the caller */
-				pager.set_reply_dst(Native_capability());
+				pager.set_reply_dst(Native_thread());
 				pager.acknowledge_wakeup();
 
 				/* revert exception flag */
@@ -111,7 +112,7 @@ void Pager_activation_base::entry()
 				}
 
 				/* send wake up message to requested thread */
-				pager.set_reply_dst(Native_capability(obj->badge(),0));
+				pager.set_reply_dst(obj->badge());
 				pager.acknowledge_wakeup();
 				break;
 			}
@@ -122,8 +123,6 @@ void Pager_activation_base::entry()
 		 */
 		case Ipc_pager::PAUSE:
 			{
-				Pager_object *obj = _ep->obj_by_id(pager.badge());
-
 				Lock::Guard guard(obj->state.lock);
 				pager.copy_regs(&obj->state);
 
@@ -131,12 +130,12 @@ void Pager_activation_base::entry()
 				obj->state.in_exception = true;
 
 				/*
-				 * It might occur, that the thread raises an exception,
+				 * It might occur that the thread raises an exception,
 				 * after it already got resumed by the cpu_session, in
 				 * that case we unblock it immediately.
 				 */
 				if (!obj->state.paused) {
-					pager.set_reply_dst(Native_capability(obj->badge(),0));
+					pager.set_reply_dst(obj->badge());
 					reply_pending = true;
 				}
 				break;

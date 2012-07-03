@@ -300,8 +300,9 @@ class Char_cell_array_character_screen : public Terminal::Character_screen
 		Cursor_visibility   _cursor_visibility;
 		int                 _region_start;
 		int                 _region_end;
+		int                 _tab_size;
 
-		enum { DEFAULT_COLOR_INDEX = 4 };
+		enum { DEFAULT_COLOR_INDEX = 4, DEFAULT_TAB_SIZE = 8 };
 
 		struct Cursor_guard
 		{
@@ -343,7 +344,8 @@ class Char_cell_array_character_screen : public Terminal::Character_screen
 			_highlight(false),
 			_cursor_visibility(CURSOR_VISIBLE),
 			_region_start(0),
-			_region_end(_boundary.height - 1)
+			_region_end(_boundary.height - 1),
+			_tab_size(DEFAULT_TAB_SIZE)
 		{ }
 
 
@@ -401,6 +403,13 @@ class Char_cell_array_character_screen : public Terminal::Character_screen
 					if (_cursor_pos.x > 0)
 						_cursor_pos.x--;
 
+					break;
+				}
+
+			case 9: /* tab */
+				{
+					Cursor_guard guard(*this);
+					_cursor_pos.x += _tab_size - (_cursor_pos.x % _tab_size);
 					break;
 				}
 
@@ -1044,8 +1053,8 @@ enum {
 
 static unsigned char usenglish_keymap[128] = {
 	 0 ,ESC,'1','2','3','4','5','6','7','8','9','0','-','=', BS,TAB,
-	'q','w','e','r','t','y','u','i','o','p','[','}', LF, 0 ,'a','s',
-	'd','f','g','h','j','k','l',';','\'','`', 0 , 0 ,'z','x','c','v',
+	'q','w','e','r','t','y','u','i','o','p','[',']', LF, 0 ,'a','s',
+	'd','f','g','h','j','k','l',';','\'','`', 0, '\\' ,'z','x','c','v',
 	'b','n','m',',','.','/', 0 , 0 , 0 ,' ', 0 , 0 , 0 , 0 , 0 , 0 ,
 	 0 , 0 , 0 , 0 , 0 , 0 , 0 ,'7','8','9','-','4','5','6','+','1',
 	'2','3','0',',', 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 ,
@@ -1063,7 +1072,7 @@ static unsigned char usenglish_shift[256 - 32] = {
 	/*  32 */ ' ', 0 , 0,  0 , 0 , 0 , 0 ,'"', 0 , 0 , 0 , 0 ,'<','_','>','?',
 	/*  48 */ ')','!','@','#','$','%','^','&','*','(', 0 ,':', 0 ,'+', 0 , 0 ,
 	/*  64 */  0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 ,
-	/*  80 */  0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 ,'{', 0 ,'}', 0 , 0 ,
+	/*  80 */  0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 ,'{','|','}', 0 , 0 ,
 	/*  96 */ '~','A','B','C','D','E','F','G','H','I','J','K','L','M','N','O',
 	/* 112 */ 'P','Q','R','S','T','U','V','W','X','Y','Z', 0 ,'\\', 0 , 0 , 0 ,
 };
@@ -1331,7 +1340,7 @@ int main(int, char **)
 	                       (env()->rm_session()->attach(ev_ds_cap));
 
 	/* initialize entry point that serves the root interface */
-	enum { STACK_SIZE = 4096 };
+	enum { STACK_SIZE = sizeof(addr_t)*1024 };
 	static Rpc_entrypoint ep(&cap, STACK_SIZE, "terminal_ep");
 
 	static Sliced_heap sliced_heap(env()->ram_session(), env()->rm_session());

@@ -13,6 +13,8 @@
 /base-okl4/download
 /base-pistachio/contrib
 /dde_ipxe/contrib
+/dde_linux/contrib
+/dde_linux/download
 /libports/contrib
 /libports/download
 /libports/include/EGL/egl.h
@@ -29,6 +31,7 @@
 /libports/include/libc-i386/
 /libports/include/libc/
 /libports/include/libpng
+/libports/include/lua
 /libports/include/lwip/lwip
 /libports/include/lwip/netif
 /libports/include/mupdf
@@ -51,7 +54,15 @@
 /libports/include/ncurses/tic.h
 /libports/include/ncurses/unctrl.h
 /libports/include/openjpeg
+/libports/include/openssl
+/libports/src/lib/openssl/x86_32/aes_enc.s
+/libports/src/lib/openssl/x86_32/cpuid.s
+/libports/src/lib/openssl/x86_64/aes_enc.s
+/libports/src/lib/openssl/x86_64/cpuid.s
+/libports/src/lib/openssl/x86_64/modexp512.s
+/libports/src/lib/openssl/x86_64/rc4_md5.s
 /libports/include/python2.6
+/libports/include/qoost
 /libports/include/readline/keymaps.h
 /libports/include/readline/rlstdc.h
 /libports/include/readline/rltypedefs.h

@@ -28,12 +28,14 @@ namespace Noux {
 	struct Terminal_io_channel : Io_channel, Signal_dispatcher
 	{
 		Terminal::Session &terminal;
+		Signal_receiver   &sig_rec;
+		bool               eof;
 
 		enum Type { STDIN, STDOUT, STDERR } type;
 
 		Terminal_io_channel(Terminal::Session &terminal, Type type,
-		                    Genode::Signal_receiver &sig_rec)
-		: terminal(terminal), type(type)
+		                    Signal_receiver &sig_rec)
+		: terminal(terminal), sig_rec(sig_rec), eof(false), type(type)
 		{
 			/*
 			 * Enable wake up STDIN channel on the presence of new input
@@ -51,9 +53,12 @@ namespace Noux {
 			}
 		}
 
-		bool write(Sysio *sysio)
+		~Terminal_io_channel() { sig_rec.dissolve(this); }
+
+		bool write(Sysio *sysio, size_t &count)
 		{
 			terminal.write(sysio->write_in.chunk, sysio->write_in.count);
+			count = sysio->write_in.count;
 			return true;
 		}
 
@@ -64,12 +69,42 @@ namespace Noux {
 				return false;
 			}
 
-			Genode::size_t const max_count =
-				Genode::min(sysio->read_in.count,
-				            sizeof(sysio->read_out.chunk));
+			/* deliver EOF observed by the previous 'read' call */
+			if (eof) {
+				sysio->read_out.count = 0;
+				eof = false;
+				return true;
+			}
+
+			size_t const max_count =
+				min(sysio->read_in.count,
+				    sizeof(sysio->read_out.chunk));
 
 			sysio->read_out.count =
 				terminal.read(sysio->read_out.chunk, max_count);
+
+			/* scan received characters for EOF */
+			for (unsigned i = 0; i < sysio->read_out.count; i++) {
+
+				enum { EOF = 4 };
+				if (sysio->read_out.chunk[i] != EOF)
+					continue;
+
+				/* discard EOF character and everything that follows... */
+				sysio->read_out.count = i;
+
+				/*
+				 * If EOF was the only character of the batch, the count has
+				 * reached zero. In this case the read result indicates the EOF
+				 * condition as is. However, if count is greater than zero, we
+				 * deliver the previous characters of the batch and return the
+				 * zero result from the subsequent 'read' call. This condition
+				 * is tracked by the 'eof' variable.
+				 */
+				if (sysio->read_out.count > 0)
+					eof = true;
+			}
+
 			return true;
 		}
 
@@ -86,6 +121,9 @@ namespace Noux {
 
 		bool check_unblock(bool rd, bool wr, bool ex) const
 		{
+			/* never block for writing */
+			if (wr) return true;
+
 			/*
 			 * Unblock I/O channel if the terminal has new user input. Channels
 			 * otther than STDIN will never unblock.
@@ -102,7 +140,6 @@ namespace Noux {
 					Terminal::Session::Size size = terminal.size();
 					sysio->ioctl_out.tiocgwinsz.rows    = size.lines();
 					sysio->ioctl_out.tiocgwinsz.columns = size.columns();
-					PDBG("OP_TIOCGWINSZ requested");
 					return true;
 				}
 

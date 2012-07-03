@@ -29,13 +29,13 @@
  * ;- run 'cat' (read syscall)
  * ;- execve
  * ;- fork
- * - pipe
+ * ;- pipe
  * ;- read init binary from vfs
- * - import env into child (execve and fork)
+ * ;- import env into child (execve and fork)
  * ;- shell
  * - debug 'find'
- * - stacked file system infrastructure
- * - TMP file system
+ * ;- stacked file system infrastructure
+ * ;- TMP file system
  * ;- RAM service using a common quota pool
  */
 
@@ -48,11 +48,11 @@
 #include <vfs_io_channel.h>
 #include <terminal_io_channel.h>
 #include <dummy_input_io_channel.h>
-#include <root_file_system.h>
-#include <tar_file_system.h>
+#include <pipe_io_channel.h>
+#include <dir_file_system.h>
 
 
-enum { verbose_syscall = false };
+enum { verbose_syscall = true };
 
 
 namespace Noux {
@@ -66,6 +66,9 @@ namespace Noux {
 
 extern "C" void wait_for_continue();
 
+extern void (*close_socket)(int);
+
+extern void init_network();
 
 /*****************************
  ** Noux syscall dispatcher **
@@ -86,20 +89,42 @@ bool Noux::Child::syscall(Noux::Session::Syscall sc)
 			                sizeof(_sysio->getcwd_out.path));
 			return true;
 
-
 		case SYSCALL_WRITE:
+			{
+				size_t const count_in = _sysio->write_in.count;
 
-			return _lookup_channel(_sysio->write_in.fd)->write(_sysio);
+				for (size_t count = 0; count != count_in; ) {
+
+					Shared_pointer<Io_channel> io = _lookup_channel(_sysio->write_in.fd);
+
+					if (!io->check_unblock(false, true, false))
+						_block_for_io_channel(io);
+
+					/*
+					 * 'io->write' is expected to update 'write_out.count'
+					 */
+					if (io->write(_sysio, count) == false)
+						return false;
+				}
+				return true;
+			}
 
 		case SYSCALL_READ:
+			{
+				Shared_pointer<Io_channel> io = _lookup_channel(_sysio->read_in.fd);
 
-			return _lookup_channel(_sysio->read_in.fd)->read(_sysio);
+				while (!io->check_unblock(true, false, false))
+					_block_for_io_channel(io);
+
+				io->read(_sysio);
+				return true;
+			}
 
 		case SYSCALL_STAT:
 		case SYSCALL_LSTAT: /* XXX implement difference between 'lstat' and 'stat' */
 
-			return _vfs->stat(_sysio, Absolute_path(_sysio->stat_in.path,
-			                                        _env.pwd()).base());
+			return _root_dir->stat(_sysio, Absolute_path(_sysio->stat_in.path,
+			                                             _env.pwd()).base());
 
 		case SYSCALL_FSTAT:
 
@@ -107,35 +132,53 @@ bool Noux::Child::syscall(Noux::Session::Syscall sc)
 
 		case SYSCALL_FCNTL:
 
+			if (_sysio->fcntl_in.cmd == Sysio::FCNTL_CMD_SET_FD_FLAGS) {
+
+				/* we assume that there is only the close-on-execve flag */
+				_lookup_channel(_sysio->fcntl_in.fd)->close_on_execve =
+					!!_sysio->fcntl_in.long_arg;
+				return true;
+			}
+
 			return _lookup_channel(_sysio->fcntl_in.fd)->fcntl(_sysio);
 
 		case SYSCALL_OPEN:
 			{
 				Absolute_path absolute_path(_sysio->open_in.path, _env.pwd());
 
-				PWRN("open pwd=%s path=%s", _env.pwd(), _sysio->open_in.path);
-
-				/* remember mode only for debug output */
-				int const mode = _sysio->open_in.mode;
-
-				Vfs_handle *vfs_handle = _vfs->open(_sysio, absolute_path.base());
+				Vfs_handle *vfs_handle = _root_dir->open(_sysio, absolute_path.base());
 				if (!vfs_handle)
 					return false;
 
-				Shared_pointer<Io_channel> channel(new Vfs_io_channel(absolute_path.base(), _vfs, vfs_handle),
-				 Genode::env()->heap());
+				char const *leaf_path = _root_dir->leaf_path(absolute_path.base());
+
+				/*
+				 * File descriptors of opened directories are handled by
+				 * '_root_dir'. In this case, we use the absolute path as leaf
+				 * path because path operations always refer to the global
+				 * root.
+				 */
+				if (vfs_handle->ds() == _root_dir)
+					leaf_path = absolute_path.base();
+
+				Shared_pointer<Io_channel>
+					channel(new Vfs_io_channel(absolute_path.base(),
+					                           leaf_path, _root_dir, vfs_handle),
+					        Genode::env()->heap());
 
 				_sysio->open_out.fd = add_io_channel(channel);
-
-				PINF("open fd %d for \"%s\" with mode %o",
-				     _sysio->open_out.fd, absolute_path.base(), mode);
 				return true;
 			}
 
 		case SYSCALL_CLOSE:
 			{
-				int const fd = _sysio->close_in.fd;
-				PINF("close fd %d", fd);
+				/**
+				 * We have to explicitly close Socket_io_channel fd's because
+				 * these are currently handled separately.
+				 */
+				if (close_socket)
+					close_socket(_sysio->close_in.fd);
+
 				remove_io_channel(_sysio->close_in.fd);
 				return true;
 			}
@@ -143,6 +186,10 @@ bool Noux::Child::syscall(Noux::Session::Syscall sc)
 		case SYSCALL_IOCTL:
 
 			return _lookup_channel(_sysio->ioctl_in.fd)->ioctl(_sysio);
+
+		case SYSCALL_LSEEK:
+
+			return _lookup_channel(_sysio->lseek_in.fd)->lseek(_sysio);
 
 		case SYSCALL_DIRENT:
 
@@ -154,37 +201,73 @@ bool Noux::Child::syscall(Noux::Session::Syscall sc)
 
 		case SYSCALL_EXECVE:
 			{
-				char const *env = "";
-				char const *filename = _sysio->execve_in.filename;
-				Child *child = new Child(filename,
-				                         parent(),
-				                         pid(),
-				                         _sig_rec,
-				                         _vfs,
-				                         Args(_sysio->execve_in.args,
-				                              sizeof(_sysio->execve_in.args)),
-				                         env, /* XXX */
-				                         _env.pwd(),
-				                         _cap_session,
-				                         _parent_services,
-				                         _resources.ep,
-				                         false);
+				Absolute_path absolute_path(_sysio->execve_in.filename, _env.pwd());
 
-				/* replace ourself by the new child at the parent */
-				parent()->remove(this);
-				parent()->insert(child);
+				/*
+				 * Deserialize environment variable buffer into a
+				 * null-terminated string. The source env buffer contains a
+				 * list of strings separated by single 0 characters. Each
+				 * string has the form "name=value" (w/o the quotes). The end
+				 * of the list is marked by an additional 0 character. The
+				 * resulting string is a null-terminated string containing a
+				 * comma-separated list of environment variables.
+				 *
+				 * In the following loop, 'i' is the index into the source
+				 * buffer, 'j' is the index into the destination buffer, 'env'
+				 * is the destination.
+				 */
+				char env[Sysio::ENV_MAX_LEN];
+				for (unsigned i = 0, j = 0; i < Sysio::ENV_MAX_LEN && _sysio->execve_in.env[i]; )
+				{
+					char const *src = &_sysio->execve_in.env[i];
 
-				_assign_io_channels_to(child);
+					/* prepend a comma in front of each entry except for the first one */
+					if (i) {
+						snprintf(env + j, sizeof(env) - j, ",");
+						j++;
+					}
 
-				/* signal main thread to remove ourself */
-				PINF("submit signal to _execve_cleanup_context_cap");
-				Genode::Signal_transmitter(_execve_cleanup_context_cap).submit();
+					snprintf(env + j, sizeof(env) - j, "%s", src);
 
-				/* start executing the new process */
-				child->start();
+					/* skip null separator in source string */
+					i += strlen(src) + 1;
+					j += strlen(src);
+				}
 
-				/* this child will be removed by the execve_finalization_dispatcher */
-				return true;
+				try {
+					Child *child = new Child(absolute_path.base(),
+					                         parent(),
+					                         pid(),
+					                         _sig_rec,
+					                         _root_dir,
+					                         Args(_sysio->execve_in.args,
+					                              sizeof(_sysio->execve_in.args)),
+					                         env,
+					                         _env.pwd(),
+					                         _cap_session,
+					                         _parent_services,
+					                         _resources.ep,
+					                         false);
+
+					/* replace ourself by the new child at the parent */
+					parent()->remove(this);
+					parent()->insert(child);
+
+					_assign_io_channels_to(child);
+
+					/* signal main thread to remove ourself */
+					Genode::Signal_transmitter(_execve_cleanup_context_cap).submit();
+
+					/* start executing the new process */
+					child->start();
+
+					/* this child will be removed by the execve_finalization_dispatcher */
+					return true;
+				}
+				catch (Child::Binary_does_not_exist) {
+					_sysio->error.execve = Sysio::EXECVE_NONEXISTENT; }
+
+				return false;
 			}
 
 		case SYSCALL_SELECT:
@@ -288,8 +371,7 @@ bool Noux::Child::syscall(Noux::Session::Syscall sc)
 				Genode::addr_t sp              = _sysio->fork_in.sp;
 				Genode::addr_t parent_cap_addr = _sysio->fork_in.parent_cap_addr;
 
-				int new_pid = pid_allocator()->alloc();
-				char const *env = "";
+				int const new_pid = pid_allocator()->alloc();
 
 				/*
 				 * XXX To ease debugging, it would be useful to generate a
@@ -300,9 +382,9 @@ bool Noux::Child::syscall(Noux::Session::Syscall sc)
 				                         this,
 				                         new_pid,
 				                         _sig_rec,
-				                         _vfs,
+				                         _root_dir,
 				                         _args,
-				                         env, /* XXX */
+				                         _env.env(),
 				                         _env.pwd(),
 				                         _cap_session,
 				                         _parent_services,
@@ -343,12 +425,8 @@ bool Noux::Child::syscall(Noux::Session::Syscall sc)
 					_sysio->wait4_out.status = exited->exit_status();
 					Family_member::remove(exited);
 
-					/* destroy 'Noux::Child' */
-					destroy(Genode::env()->heap(), exited);
-
-					PINF("quota: avail=%zd, used=%zd",
-					     Genode::env()->ram_session()->avail(),
-					     Genode::env()->ram_session()->used());
+					PINF("submit exit signal for PID %d", exited->pid());
+					static_cast<Child *>(exited)->submit_exit_signal();
 
 				} else {
 					_sysio->wait4_out.pid    = 0;
@@ -357,6 +435,61 @@ bool Noux::Child::syscall(Noux::Session::Syscall sc)
 				return true;
 			}
 
+		case SYSCALL_PIPE:
+			{
+				Shared_pointer<Pipe> pipe(new Pipe, Genode::env()->heap());
+
+				Shared_pointer<Io_channel> pipe_sink(new Pipe_sink_io_channel(pipe, *_sig_rec),
+				                                     Genode::env()->heap());
+				Shared_pointer<Io_channel> pipe_source(new Pipe_source_io_channel(pipe, *_sig_rec),
+				                                       Genode::env()->heap());
+
+				_sysio->pipe_out.fd[0] = add_io_channel(pipe_source);
+				_sysio->pipe_out.fd[1] = add_io_channel(pipe_sink);
+
+				return true;
+			}
+
+		case SYSCALL_DUP2:
+			{
+				add_io_channel(io_channel_by_fd(_sysio->dup2_in.fd),
+				               _sysio->dup2_in.to_fd);
+				return true;
+			}
+
+		case SYSCALL_UNLINK:
+
+			return _root_dir->unlink(_sysio, Absolute_path(_sysio->unlink_in.path,
+			                                               _env.pwd()).base());
+
+		case SYSCALL_RENAME:
+
+			return _root_dir->rename(_sysio, Absolute_path(_sysio->rename_in.from_path,
+			                                               _env.pwd()).base(),
+			                                 Absolute_path(_sysio->rename_in.to_path,
+			                                               _env.pwd()).base());
+
+		case SYSCALL_MKDIR:
+
+			return _root_dir->mkdir(_sysio, Absolute_path(_sysio->mkdir_in.path,
+			                                              _env.pwd()).base());
+
+		case SYSCALL_SOCKET:
+		case SYSCALL_GETSOCKOPT:
+		case SYSCALL_SETSOCKOPT:
+		case SYSCALL_ACCEPT:
+		case SYSCALL_BIND:
+		case SYSCALL_LISTEN:
+		case SYSCALL_SEND:
+		case SYSCALL_SENDTO:
+		case SYSCALL_RECV:
+		case SYSCALL_GETPEERNAME:
+		case SYSCALL_SHUTDOWN:
+		case SYSCALL_CONNECT:
+		case SYSCALL_GETADDRINFO:
+			{
+				return _syscall_net(sc);
+			}
 		case SYSCALL_INVALID: break;
 		}
 	}
@@ -500,16 +633,11 @@ int main(int argc, char **argv)
 	static Genode::Cap_connection cap;
 
 	/* initialize virtual file system */
-	static Vfs vfs;
+	static Dir_file_system
+		root_dir(config()->xml_node().sub_node("fstab"));
 
-	try {
-		Genode::Xml_node fs = Genode::config()->xml_node().sub_node("fstab").sub_node();
-		for (; ; fs = fs.next()) {
-			if (fs.has_type("tar"))
-				vfs.add_file_system(new Tar_file_system(fs));
-		}
-	} catch (Genode::Xml_node::Nonexistent_sub_node) { }
-
+	/* initialize network */
+	init_network();
 	/*
 	 * Entrypoint used to virtualize child resources such as RAM, RM
 	 */
@@ -523,7 +651,7 @@ int main(int argc, char **argv)
 	                             0,
 	                             pid_allocator()->alloc(),
 	                             &sig_rec,
-	                             &vfs,
+	                             &root_dir,
 	                             args_of_init_process(),
 	                             env_string_of_init_process(),
 	                             "/",
@@ -558,9 +686,8 @@ int main(int argc, char **argv)
 		Signal_dispatcher *dispatcher =
 			static_cast<Signal_dispatcher *>(signal.context());
 
-		if (dispatcher)
-			for (int i = 0; i < signal.num(); i++)
-				dispatcher->dispatch();
+		for (int i = 0; i < signal.num(); i++)
+			dispatcher->dispatch();
 	}
 
 	PINF("-- exiting noux ---");

@@ -39,7 +39,8 @@ class Context_area_rm_session : public Genode::Rm_session
 		 */
 		Local_addr attach(Genode::Dataspace_capability ds_cap,
 		                  Genode::size_t size, Genode::off_t offset,
-		                  bool use_local_addr, Local_addr local_addr)
+		                  bool use_local_addr, Local_addr local_addr,
+		                  bool executable)
 		{
 			using namespace Genode;
 
@@ -77,7 +78,7 @@ class Context_area_ram_session : public Genode::Ram_session
 {
 	public:
 
-		Genode::Ram_dataspace_capability alloc(Genode::size_t size) {
+		Genode::Ram_dataspace_capability alloc(Genode::size_t size, bool) {
 			return Genode::Ram_dataspace_capability(); }
 
 		void free(Genode::Ram_dataspace_capability) { }

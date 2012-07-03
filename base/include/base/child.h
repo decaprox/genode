@@ -69,7 +69,8 @@ namespace Genode {
 		 */
 		virtual bool announce_service(const char            *name,
 		                              Root_capability        root,
-		                              Allocator             *alloc)
+		                              Allocator             *alloc,
+		                              Server                *server)
 		{ return false; }
 
 		/**
@@ -286,20 +287,23 @@ namespace Genode {
 			Rpc_entrypoint         *_entrypoint;
 			Parent_capability       _parent_cap;
 
-			Process                 _process;
+			/* child policy */
+			Child_policy           *_policy;
 
 			/* sessions opened by the child */
 			Lock                    _lock;   /* protect list manipulation */
 			Object_pool<Session>    _session_pool;
 			List<Session>           _session_list;
 
-			/* child policy */
-			Child_policy           *_policy;
+			/* server role */
+			Server                 _server;
 
 			/**
 			 * Session-argument buffer
 			 */
 			char _args[Parent::Session_args::MAX_SIZE];
+
+			Process _process;
 
 			/**
 			 * Attach session information to a child
@@ -375,8 +379,9 @@ namespace Genode {
 				_heap(&_ram_session_client, env()->rm_session()),
 				_entrypoint(entrypoint),
 				_parent_cap(_entrypoint->manage(this)),
-				_process(elf_ds, ram, cpu, rm, _parent_cap, policy->name(), 0),
-				_policy(policy)
+				_policy(policy),
+				_server(ram),
+				_process(elf_ds, ram, cpu, rm, _parent_cap, policy->name(), 0)
 			{ }
 
 			/**
@@ -437,7 +442,7 @@ namespace Genode {
 			{
 				if (!name.is_valid_string()) return;
 
-				_policy->announce_service(name.string(), root, heap());
+				_policy->announce_service(name.string(), root, heap(), &_server);
 			}
 
 			Session_capability session(Service_name const &name, Session_args const &args)

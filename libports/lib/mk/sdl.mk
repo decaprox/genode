@@ -18,10 +18,13 @@ SHARED_LIB = yes
 
 # backends
 SRC_CC   = SDL_genode_fb_video.cc \
-           SDL_genode_fb_events.cc
+           SDL_genode_fb_events.cc \
+           SDL_genodeaudio.cc \
+           SDL_systimer.cc
 
 INC_DIR += $(REP_DIR)/include/SDL \
            $(REP_DIR)/src/lib/sdl \
+           $(REP_DIR)/src/lib/sdl/thread \
            $(REP_DIR)/src/lib/sdl/video
 
 # main files
@@ -43,15 +46,17 @@ SRC_C   += SDL_getenv.c \
 # thread subsystem
 SRC_C   += SDL_thread.c \
            SDL_systhread.c \
+           SDL_syscond.c \
            SDL_sysmutex.c \
            SDL_syssem.c
+INC_DIR += $(SDL_DIR)/src/thread
 
 # cpuinfo subsystem
 SRC_C   += SDL_cpuinfo.c
 
 # timer subsystem
-SRC_C   += SDL_systimer.c \
-           SDL_timer.c
+SRC_C   += SDL_timer.c
+INC_DIR += $(SDL_DIR)/src/timer
 
 # video subsystem
 SRC_C  +=  SDL_blit_0.c \
@@ -89,8 +94,9 @@ SRC_C   += SDL_audio.c \
            SDL_mixer_m68k.c \
            SDL_mixer_MMX.c \
            SDL_mixer_MMX_VC.c \
-           SDL_wave.c \
-           SDL_dummyaudio.c
+           SDL_wave.c
+
+INC_DIR += $(SDL_DIR)/src/audio
 
 # file I/O subsystem
 SRC_C   += SDL_rwops.c
@@ -101,7 +107,7 @@ SRC_C   += SDL_joystick.c \
 INC_DIR += $(SDL_DIR)/src/joystick
 
 # we need libc
-LIBS = libc
+LIBS = libc pthread
 
 # dim build noise for contrib code
 CC_OPT_SDL_RLEaccel += -Wno-unused-but-set-variable
@@ -111,19 +117,22 @@ CC_OPT_SDL_wave     += -Wno-unused-but-set-variable
 
 # backend pathes
 vpath %    $(REP_DIR)/src/lib/sdl
+vpath %    $(REP_DIR)/src/lib/sdl/audio
+vpath %    $(REP_DIR)/src/lib/sdl/timer
 vpath %    $(REP_DIR)/src/lib/sdl/video
 
 # contribution pathes
+vpath SDL_syscond.c   $(SDL_DIR)/src/thread/generic
+vpath SDL_sysmutex.c  $(SDL_DIR)/src/thread/generic
+
 vpath %.c  $(SDL_DIR)/src
 vpath %.c  $(SDL_DIR)/src/stdlib
 vpath %.c  $(SDL_DIR)/src/video
 vpath %.c  $(SDL_DIR)/src/video/dummy
 vpath %.c  $(SDL_DIR)/src/audio
-vpath %.c  $(SDL_DIR)/src/audio/dummy
 vpath %.c  $(SDL_DIR)/src/thread
-vpath %.c  $(SDL_DIR)/src/thread/generic
+vpath %.c  $(SDL_DIR)/src/thread/pthread
 vpath %.c  $(SDL_DIR)/src/timer
-vpath %.c  $(SDL_DIR)/src/timer/dummy
 vpath %.c  $(SDL_DIR)/src/events
 vpath %.c  $(SDL_DIR)/src/cpuinfo
 vpath %.c  $(SDL_DIR)/src/file

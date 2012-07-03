@@ -29,6 +29,8 @@
 
 namespace Noux {
 
+	using namespace Genode;
+
 	struct Sysio
 	{
 		/*
@@ -55,6 +57,18 @@ namespace Noux {
 		typedef char Env[ENV_MAX_LEN];
 
 		typedef __SIZE_TYPE__ size_t;
+		typedef long int ssize_t;
+
+		/**
+		 * Flags of 'mode' argument of open syscall
+		 */
+		enum {
+			OPEN_MODE_RDONLY  = 0,
+			OPEN_MODE_WRONLY  = 1,
+			OPEN_MODE_RDWR    = 2,
+			OPEN_MODE_ACCMODE = 3,
+			OPEN_MODE_CREATE  = 0x0200,
+		};
 
 		enum {
 			STAT_MODE_SYMLINK   = 0120000,
@@ -65,7 +79,7 @@ namespace Noux {
 
 		struct Stat
 		{
-			Genode::size_t size;
+			size_t         size;
 			unsigned       mode;
 			unsigned       uid;
 			unsigned       gid;
@@ -98,12 +112,15 @@ namespace Noux {
 			};
 		};
 
+		enum Lseek_whence { LSEEK_SET, LSEEK_CUR, LSEEK_END };
+
 		enum { DIRENT_MAX_NAME_LEN = 128 };
 
 		enum Dirent_type {
 			DIRENT_TYPE_FILE,
 			DIRENT_TYPE_DIRECTORY,
 			DIRENT_TYPE_FIFO,
+			DIRENT_TYPE_CHARDEV,
 			DIRENT_TYPE_SYMLINK,
 			DIRENT_TYPE_END
 		};
@@ -117,6 +134,7 @@ namespace Noux {
 
 		enum Fcntl_cmd {
 			FCNTL_CMD_GET_FILE_STATUS_FLAGS,
+			FCNTL_CMD_SET_FILE_STATUS_FLAGS,
 			FCNTL_CMD_SET_FD_FLAGS
 		};
 
@@ -148,7 +166,7 @@ namespace Noux {
 			 * Return total number of file descriptors contained in the array
 			 */
 			size_t total_fds() const {
-				return Genode::min(num_rd + num_wr + num_ex, (size_t)MAX_FDS); }
+				return min(num_rd + num_wr + num_ex, (size_t)MAX_FDS); }
 
 			/**
 			 * Check for maximum population of fds array
@@ -203,11 +221,67 @@ namespace Noux {
 			bool zero() const { return (sec == 0) && (usec == 0); }
 		};
 
+		/**
+		 * Socket related structures
+		 */
+		enum { MAX_HOSTNAME_LEN = 255 };
+		typedef char Hostname[MAX_HOSTNAME_LEN];
+
+		enum { MAX_SERVNAME_LEN = 255 };
+		typedef char Servname[MAX_SERVNAME_LEN];
+
+		enum { MAX_ADDRINFO_RESULTS = 4 };
+
+		struct in_addr
+		{
+			unsigned int    s_addr;
+		};
+
+		struct sockaddr
+		{
+			unsigned char   sa_len;
+			unsigned char   sa_family;
+			char            sa_data[14];
+		};
+
+		struct sockaddr_in {
+			unsigned char   sin_len;
+			unsigned char   sin_family;
+			unsigned short  sin_port;
+			struct          in_addr sin_addr;
+			char            sin_zero[8];
+		};
+
+		typedef unsigned        socklen_t;
+
+		struct addrinfo {
+			int              ai_flags;
+			int              ai_family;
+			int              ai_socktype;
+			int              ai_protocol;
+			socklen_t        ai_addrlen;
+			struct sockaddr *ai_addr;
+			char            *ai_canonname;
+			struct addrinfo *ai_next;
+		};
+
+		struct Addrinfo {
+			struct addrinfo  addrinfo;
+			struct sockaddr  ai_addr;
+			char             ai_canonname[255];
+		};
+
 		enum General_error { ERR_FD_INVALID, NUM_GENERAL_ERRORS };
 		enum Stat_error    { STAT_ERR_NO_ENTRY     = NUM_GENERAL_ERRORS };
 		enum Fcntl_error   { FCNTL_ERR_CMD_INVALID = NUM_GENERAL_ERRORS };
-		enum Open_error    { OPEN_ERR_UNACCESSIBLE = NUM_GENERAL_ERRORS };
+		enum Open_error    { OPEN_ERR_UNACCESSIBLE, OPEN_ERR_NO_PERM };
 		enum Execve_error  { EXECVE_NONEXISTENT    = NUM_GENERAL_ERRORS };
+		enum Unlink_error  { UNLINK_ERR_NO_ENTRY, UNLINK_ERR_NO_PERM };
+		enum Rename_error  { RENAME_ERR_NO_ENTRY, RENAME_ERR_CROSS_FS,
+		                     RENAME_ERR_NO_PERM };
+		enum Mkdir_error   { MKDIR_ERR_EXISTS,   MKDIR_ERR_NO_ENTRY,
+		                     MKDIR_ERR_NO_SPACE, MKDIR_ERR_NO_PERM,
+		                     MKDIR_ERR_NAME_TOO_LONG};
 
 		union {
 			General_error general;
@@ -215,13 +289,17 @@ namespace Noux {
 			Fcntl_error   fcntl;
 			Open_error    open;
 			Execve_error  execve;
+			Unlink_error  unlink;
+			Rename_error  rename;
+			Mkdir_error   mkdir;
 		} error;
 
 		union {
 
 			SYSIO_DECL(getcwd, { }, { Path path; });
 
-			SYSIO_DECL(write,  { int fd; size_t count; Chunk chunk; }, { });
+			SYSIO_DECL(write,  { int fd; size_t count; Chunk chunk; },
+			                   { size_t count; });
 
 			SYSIO_DECL(stat,   { Path path; }, { Stat st; });
 
@@ -236,11 +314,14 @@ namespace Noux {
 
 			SYSIO_DECL(ioctl,  : Ioctl_in { int fd; }, : Ioctl_out { });
 
-			SYSIO_DECL(dirent, { int fd; int index; }, { Dirent entry; });
+			SYSIO_DECL(lseek,  { int fd; off_t offset; Lseek_whence whence; },
+			                   { off_t offset; });
+
+			SYSIO_DECL(dirent, { int fd; }, { Dirent entry; });
 
 			SYSIO_DECL(fchdir, { int fd; }, { });
 
-			SYSIO_DECL(read,   { int fd; Genode::size_t count; },
+			SYSIO_DECL(read,   { int fd; size_t count; },
 			                   { Chunk chunk; size_t count; });
 
 			SYSIO_DECL(execve, { Path filename; Args args; Env env; }, { });
@@ -248,14 +329,66 @@ namespace Noux {
 			SYSIO_DECL(select, { Select_fds fds; Select_timeout timeout; },
 			                   { Select_fds fds; });
 
-			SYSIO_DECL(fork,   { Genode::addr_t ip; Genode::addr_t sp;
-			                     Genode::addr_t parent_cap_addr; },
+			SYSIO_DECL(fork,   { addr_t ip; addr_t sp;
+			                     addr_t parent_cap_addr; },
 			                   { int pid; });
 
 			SYSIO_DECL(getpid, { }, { int pid; });
 
 			SYSIO_DECL(wait4,  { int pid; bool nohang; },
 			                   { int pid; int status; });
+			SYSIO_DECL(pipe,   { }, { int fd[2]; });
+
+			SYSIO_DECL(dup2,   { int fd; int to_fd; }, { });
+
+			SYSIO_DECL(unlink, { Path path; }, { });
+
+			SYSIO_DECL(rename, { Path from_path; Path to_path; }, { });
+
+			SYSIO_DECL(mkdir,  { Path path; int mode; }, { });
+
+			SYSIO_DECL(socket, { int domain; int type; int protocol; },
+			                   { int fd; });
+
+			 /* XXX for now abuse Chunk for passing optval */
+			SYSIO_DECL(getsockopt, { int fd; int level; int optname; Chunk optval;
+			                       socklen_t optlen; }, { int result; });
+
+			SYSIO_DECL(setsockopt, { int fd; int level;
+			                         int optname; Chunk optval;
+			                         socklen_t optlen; }, { });
+
+			SYSIO_DECL(accept, { int fd; struct sockaddr addr; socklen_t addrlen; },
+			                   { int fd; });
+
+			SYSIO_DECL(bind,   { int fd; struct sockaddr addr;
+			                     socklen_t addrlen; }, { int result; });
+
+			SYSIO_DECL(getpeername, { int fd; struct sockaddr addr;
+			                          socklen_t addrlen; }, { });
+
+			SYSIO_DECL(listen, { int fd; int type; int backlog; },
+			                   { int result; });
+
+			SYSIO_DECL(send,   { int fd; Chunk buf; size_t len; int flags; },
+			                   { ssize_t len; });
+
+			SYSIO_DECL(sendto, { int fd; Chunk buf; size_t len; int flags;
+			                     struct sockaddr dest_addr; socklen_t addrlen; },
+			                   { ssize_t len; });
+
+			SYSIO_DECL(recv,   { int fd; Chunk buf; size_t len; int flags; },
+			                   { size_t len; });
+
+			SYSIO_DECL(shutdown, { int fd; int how; }, { });
+
+			SYSIO_DECL(connect, { int fd; struct sockaddr addr; socklen_t addrlen; },
+			                    { int result; });
+
+			SYSIO_DECL(getaddrinfo, { Hostname hostname; Servname servname;
+			                          Addrinfo hints;
+			                          Addrinfo res[MAX_ADDRINFO_RESULTS]; },
+			                        { int addr_num; });
 		};
 	};
 };

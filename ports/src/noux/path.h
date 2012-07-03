@@ -37,7 +37,7 @@ namespace Noux {
 
 			static bool ends_with(char c, char const *path)
 			{
-				return path[0] && (path[Genode::strlen(path) - 1] == c);
+				return path[0] && (path[strlen(path) - 1] == c);
 			}
 
 			static void remove_char(char *buf)
@@ -59,9 +59,10 @@ namespace Noux {
 					path[i] = 0;
 			}
 
-			static char const *last_element(char const *path)
+			template <typename T>
+			static T *last_element(T *path)
 			{
-				char const *result = path;
+				T *result = path;
 				for (; *path; path++)
 					if (path[0] == '/' && path[1] != 0)
 						result = path;
@@ -70,7 +71,7 @@ namespace Noux {
 
 			static bool is_empty(char const *path)
 			{
-				return Genode::strlen(path) == 0;
+				return strlen(path) == 0;
 			}
 
 			/**
@@ -86,6 +87,17 @@ namespace Noux {
 						remove_char(path);
 						remove_char(path);
 					}
+				}
+			}
+
+			static void strip_superfluous_slashes(char *path)
+			{
+				for (; *path; path++) {
+					if (path[0] != '/') continue;
+
+					/* strip superfluous slashes, e.g., "//path/" -> "/path" */
+					while (path[1] == '/')
+						remove_char(path);
 				}
 			}
 
@@ -125,6 +137,10 @@ namespace Noux {
 					while (cut_start > 0 && path[cut_start - 1] != '/')
 						cut_start--;
 
+					/* skip slash in front of the pair of dots */
+					if (cut_start > 0)
+						cut_start--;
+
 					strip(path + cut_start, cut_end - cut_start);
 				}
 			}
@@ -133,8 +149,8 @@ namespace Noux {
 
 			Path_base(const Path_base &);
 
-			char * const         _path;
-			Genode::size_t const _path_max_len;
+			char * const _path;
+			size_t const _path_max_len;
 
 			/**
 			 * Append 'path'
@@ -143,12 +159,12 @@ namespace Noux {
 			 */
 			void _append(char const *path)
 			{
-				Genode::size_t const orig_len = Genode::strlen(_path);
+				size_t const orig_len = strlen(_path);
 
-				if (Genode::strlen(path) + orig_len + 1 >= _path_max_len)
+				if (strlen(path) + orig_len + 1 >= _path_max_len)
 					throw Path_too_long();
 
-				Genode::strncpy(_path + orig_len, path, _path_max_len - orig_len);
+				strncpy(_path + orig_len, path, _path_max_len - orig_len);
 			}
 
 			void _append_slash_if_needed()
@@ -166,6 +182,7 @@ namespace Noux {
 			{
 				strip_superfluous_dotslashes(_path);
 				strip_double_dot_dirs(_path);
+				strip_superfluous_slashes(_path);
 				remove_trailing('.', _path);
 			}
 
@@ -175,14 +192,14 @@ namespace Noux {
 				 * Validate 'pwd' argument, if not supplied, enforce invariant
 				 * that 'pwd' is an absolute path.
 				 */
-				if (!pwd || Genode::strlen(pwd) == 0)
+				if (!pwd || strlen(pwd) == 0)
 					pwd = "/";
 
 				/*
 				 * Use argument path if absolute
 				 */
 				if (is_absolute(path))
-					Genode::strncpy(_path, path, _path_max_len);
+					strncpy(_path, path, _path_max_len);
 
 				/*
 				 * Otherwise, concatenate current working directory with
@@ -191,7 +208,7 @@ namespace Noux {
 				else {
 					const char *const relative_path = path;
 
-					Genode::strncpy(_path, pwd, _path_max_len);
+					strncpy(_path, pwd, _path_max_len);
 
 					if (!is_empty(relative_path)) {
 
@@ -199,15 +216,13 @@ namespace Noux {
 						_append_slash_if_needed();
 						_append(relative_path);
 					}
-//					PDBG("path: '%s'", _path);
 				}
 				_canonicalize();
-//				PDBG("canonical path: '%s'", _path);
 			}
 
 		public:
 
-			Path_base(char *buf, Genode::size_t buf_len,
+			Path_base(char *buf, size_t buf_len,
 			          char const *path, char const *pwd = 0)
 			:
 				_path(buf), _path_max_len(buf_len)
@@ -217,8 +232,8 @@ namespace Noux {
 
 			void import(char const *path) { _import(path); }
 
-			char             *base() { return _path; }
-			Genode::size_t max_len() { return _path_max_len; }
+			char  *base() { return _path; }
+			size_t max_len() { return _path_max_len; }
 
 			void remove_trailing(char c) { remove_trailing(c, _path); }
 
@@ -231,15 +246,20 @@ namespace Noux {
 				*dst = 0;
 			}
 
-			bool equals(Path_base const &ref) const { return Genode::strcmp(ref._path, _path) == 0; }
+			void strip_last_element()
+			{
+				last_element(_path)[1] = 0;
+			}
 
-			bool equals(char const *str) const { return Genode::strcmp(str, _path) == 0; }
+			bool equals(Path_base const &ref) const { return strcmp(ref._path, _path) == 0; }
+
+			bool equals(char const *str) const { return strcmp(str, _path) == 0; }
 
 			bool strip_prefix(char const *prefix)
 			{
-				unsigned prefix_len = Genode::strlen(prefix);
+				unsigned prefix_len = strlen(prefix);
 
-				if (Genode::strcmp(prefix, _path, prefix_len) != 0)
+				if (strcmp(prefix, _path, prefix_len) != 0)
 					return false;
 
 				if (prefix_len > 0 && ends_with('/', prefix))
@@ -269,7 +289,7 @@ namespace Noux {
 				return (num_slashes == 1) && !equals("/");
 			}
 
-			void append(char const *str) { _append(str); }
+			void append(char const *str) { _append(str); _canonicalize(); }
 	};
 
 

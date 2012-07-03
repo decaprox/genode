@@ -38,8 +38,8 @@
 #include <stdio.h>
 #include <sys/types.h>
 
-/* Enable the dummy audio driver (src/audio/dummy/\*.c) */
-#define SDL_AUDIO_DRIVER_DUMMY 1
+/* Enable the Genode audio driver */
+#define SDL_AUDIO_DRIVER_GENODE 1
 
 /* Enable the stub cdrom driver (src/cdrom/dummy/\*.c) */
 #define SDL_CDROM_DISABLED 1
@@ -50,8 +50,8 @@
 /* Enable the stub shared object loader (src/loadso/dummy/\*.c) */
 #define SDL_LOADSO_DISABLED 1
 
-/* Enable the stub thread support (src/thread/generic/\*.c) */
-#define SDL_THREADS_DISABLED 1
+/* Enable thread support */
+#define SDL_THREAD_PTHREAD 1
 
 /* Enable dummy timer support */
 #define SDL_TIMER_DUMMY 1

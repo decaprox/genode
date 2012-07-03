@@ -188,6 +188,21 @@ proc compare_output_to { good } {
 		incr i
 	}
 
+	#
+	# if $good is empty the foreach-loop isn't entered
+	# so we've to check for it separately
+	#
+	if {![llength $good_list] && [llength $output_list]} {
+		foreach output_line $output_list {
+			set output_line [strip_whitespace $output_line]
+			puts ""
+			puts stderr "Line $i of output is unexpected"
+			puts stderr " got:      '$output_line'"
+			incr mismatch_cnt
+			incr i
+		}
+	}
+
 	if {$mismatch_cnt > 0} {
 		puts "Error: Test failed, $mismatch_cnt unexpected lines of output"
 		exit -1
@@ -399,9 +414,15 @@ proc spawn_qemu { wait_for_re timeout_value } {
 	global qemu_args
 	global qemu
 	global spawn_id
-	set qemu "qemu"
 
-	# use special qemu versions for non x86_32 architectures
+	#
+	# Back out on platforms w/o Qemu support
+	#
+	if {[have_spec platform_panda]}  {
+		puts stderr "skipping execution because platform is not supported by qemu"
+		return 0 }
+
+	if {[have_spec x86_32]} { set qemu "qemu-system-i386" }
 	if {[have_spec x86_64]} { set qemu "qemu-system-x86_64" }
 	if {[have_spec arm]}    { set qemu "qemu-system-arm" }
 
@@ -426,8 +447,14 @@ proc spawn_qemu { wait_for_re timeout_value } {
 	if {[have_spec platform_vpb926]} { append qemu_args " -M versatilepb     -m 128 " }
 	if {[have_spec platform_vea9x4]} { append qemu_args " -M vexpress-a9 -cpu cortex-a9 -m 256 " }
 
-	# on x86, we supply the boot image as ISO image
-	if {[have_spec x86]} { append qemu_args " -cdrom [run_dir].iso " }
+	# on x86, we support booting via pxe or iso image [default]
+	if {[have_spec x86]} {
+		if {[have_spec boot_pxe]} {
+			append qemu_args " -boot n -tftp [run_dir] -bootp boot/pulsar -no-reboot -no-shutdown "
+		} else {
+			append qemu_args " -cdrom [run_dir].iso "
+		}
+	}
 
 	# on ARM, we supply the boot image as kernel
 	if {[have_spec arm]} { append qemu_args " -kernel [run_dir]/image.elf " }

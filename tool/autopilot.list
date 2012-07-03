@@ -4,6 +4,7 @@ rm_fault
 rom_blk
 tar_rom
 noux
+noux_net_netcat
 libc_ffat
 timed_semaphore
 signal
@@ -13,3 +14,4 @@ l4linux
 lx_hybrid_ctors
 lx_hybrid_exception
 lx_hybrid_pthread_ipc
+moon

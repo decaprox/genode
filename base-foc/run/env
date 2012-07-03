@@ -176,8 +176,8 @@ proc build_boot_image_arm {binaries} {
 	close $fh
 
 	set gen_img_cmd "cd [l4_dir]/source/pkg/bootstrap/server/src && "
-	append gen_img_cmd "make O=[l4_dir] ENTRY=genode "
-	append gen_img_cmd "BOOTSTRAP_DO_UIMAGE=Y BOOTSTRAP_DO_RAW_IMAGE=Y "
+	append gen_img_cmd "make O=[l4_dir] E=genode "
+	append gen_img_cmd "BOOTSTRAP_DO_UIMAGE=Y BOOTSTRAP_DO_RAW_IMAGE= "
 	append gen_img_cmd "BOOTSTRAP_MODULES_LIST=[pwd]/[run_dir]/modules.list "
 	append gen_img_cmd "BOOTSTRAP_SEARCH_PATH=[pwd]/[run_dir]:[file dirname [fiasco]]:[l4_dir] "
 	append gen_img_cmd "SYSTEM_TARGET=[cross_dev_prefix]"
@@ -185,12 +185,14 @@ proc build_boot_image_arm {binaries} {
 	set pid [eval "spawn sh -c \"$gen_img_cmd\""]
 	expect { eof { } }
 	if {[lindex [wait $pid] end] != 0} {
-		puts "Error: Single-image creation failed"
+		puts stderr "Error: Single-image creation failed"
 		exit -4
 	}
 
 	exec cp [bin_dir]/bootstrap.elf [run_dir]/image.elf
 	exec cp [bin_dir]/bootstrap_genode.uimage [run_dir]/image.uimage
+
+	puts "\nboot image: [run_dir]/image.elf\n"
 }
 
 
