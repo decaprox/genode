@@ -18,12 +18,6 @@ usage:
 	@echo
 	@echo "  create_builddir <platform> BUILD_DIR=<build-dir>"
 	@echo
-<<<<<<< HEAD
-	@echo "  <platform>   can be 'linux_x86', 'fiasco_x86', 'pistachio_x86',"
-	@echo "               'okl4_x86', 'nova_x86', 'codezero_vpb926',"
-	@echo "               'mb_s3a_starter_kit', foc_x86_32', 'foc_x86_64',"
-	@echo "               'foc_pbxa9', 'foc_vea9x4', 'foc_overo' or 'lx_hybrid_x86'"
-=======
 	@echo "  <platform>   can be:"
 	@echo "                  'linux_x86'"
 	@echo "                  'fiasco_x86'"
@@ -39,7 +33,7 @@ usage:
 	@echo "                  'foc_vea9x4'"
 	@echo "                  'foc_panda'"
 	@echo "                  'lx_hybrid_x86'"
->>>>>>> upstream/master
+	@echo "                  'foc_overo'"
 	@echo
 	@echo "  <build-dir>  is the location of the build directory to create"
 	@echo
@@ -120,11 +114,7 @@ $(BUILD_DIR)/Makefile:
 #
 # Add 'ports-foc' repository to Fiasco.OC build directory
 #
-<<<<<<< HEAD
-ifeq ($(filter-out foc_x86_32 foc_pbxa9 foc_overo,$(PLATFORM)),)
-=======
-ifeq ($(filter-out foc_x86_32 foc_pbxa9 foc_vea9x4 foc_panda,$(PLATFORM)),)
->>>>>>> upstream/master
+ifeq ($(filter-out foc_x86_32 foc_pbxa9 foc_overo foc_vea9x4 foc_panda,$(PLATFORM)),)
 $(BUILD_DIR)/etc/build.conf::
 	@cat $(BUILD_CONF).ports-foc >> $@
 endif
