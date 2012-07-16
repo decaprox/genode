@@ -368,6 +368,7 @@ namespace Init {
 			Init::Child_policy_handle_cpu_priorities _priority_policy;
 			Init::Child_policy_provide_rom_file      _config_policy;
 			Init::Child_policy_provide_rom_file      _binary_policy;
+			Init::Child_policy_redirect_rom_file     _configfile_policy;
 
 		public:
 
@@ -396,7 +397,8 @@ namespace Init {
 				_labeling_policy(_name.unique),
 				_priority_policy(_resources.prio_levels_log2, _resources.priority),
 				_config_policy("config", _config.dataspace(), &_entrypoint),
-				_binary_policy("binary", _binary_rom.dataspace(), &_entrypoint)
+				_binary_policy("binary", _binary_rom.dataspace(), &_entrypoint),
+				_configfile_policy("config", _config.filename())
 			{
 				using namespace Genode;
 
@@ -545,11 +547,13 @@ namespace Init {
 			{
 				_labeling_policy.filter_session_args(service, args, args_len);
 				_priority_policy.filter_session_args(service, args, args_len);
+				_configfile_policy.filter_session_args(service, args, args_len);
 			}
 
 			bool announce_service(const char             *service_name,
 			                      Genode::Root_capability root,
-			                      Genode::Allocator      *alloc)
+			                      Genode::Allocator      *alloc,
+			                      Genode::Server         *server)
 			{
 				if (config_verbose)
 					Genode::printf("child \"%s\" announces service \"%s\"\n",

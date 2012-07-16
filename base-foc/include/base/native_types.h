@@ -53,16 +53,20 @@ namespace Genode {
 	 */
 	class Native_capability
 	{
+		public:
+
+			typedef Fiasco::l4_cap_idx_t Dst;
+
+			struct Raw
+			{
+				Dst  dst;
+				long local_name;
+			};
+
 		private:
 
 			Cap_index* _idx;
 			void*      _ptr;
-
-			inline Native_thread_id _cap_sel() const
-			{
-				return _idx ? Native_thread_id(_idx->kcap())
-				            : Native_thread_id();
-			}
 
 		protected:
 
@@ -74,6 +78,19 @@ namespace Genode {
 			 */
 			Native_capability(void* ptr) : _idx(0), _ptr(ptr) { }
 
+			inline void _inc()
+			{
+				if (_idx)
+					_idx->inc();
+			}
+
+			inline void _dec()
+			{
+				if (_idx && !_idx->dec()) {
+					cap_map()->remove(_idx);
+				}
+			}
+
 		public:
 
 			/**
@@ -84,7 +101,16 @@ namespace Genode {
 			/**
 			 * Construct capability manually
 			 */
-			Native_capability(Cap_index* idx) : _idx(idx), _ptr(0) { }
+			Native_capability(Cap_index* idx)
+				: _idx(idx), _ptr(0) { _inc(); }
+
+			Native_capability(const Native_capability &o)
+			: _idx(o._idx), _ptr(o._ptr) { _inc(); }
+
+			~Native_capability()
+			{
+				_dec();
+			}
 
 			/**
 			 * Return Cap_index object referenced by this object
@@ -97,16 +123,25 @@ namespace Genode {
 			bool operator==(const Native_capability &o) const {
 				return (_ptr) ? _ptr == o._ptr : _idx == o._idx; }
 
+			Native_capability& operator=(const Native_capability &o){
+				if (this == &o)
+					return *this;
+
+				_dec();
+				_ptr = o._ptr;
+				_idx = o._idx;
+				_inc();
+				return *this;
+			}
 
 			/*******************************************
 			 **  Interface provided by all platforms  **
 			 *******************************************/
 
-			int       local_name() const { return _idx ? _idx->id() : 0;        }
-			Native_thread    dst() const { return _cap_sel();                   }
-			bool           valid() const { return (_idx != 0) && _idx->valid(); }
-			void*          local() const { return _ptr;                         }
-			void copy_to(void* dst)      { *((int*)dst) = local_name();         }
+			int   local_name() const { return _idx ? _idx->id() : 0;        }
+			Dst   dst()        const { return _idx ? Dst(_idx->kcap()) : Dst(); }
+			bool  valid()      const { return (_idx != 0) && _idx->valid(); }
+			void *local()      const { return _ptr;                         }
 	};
 
 

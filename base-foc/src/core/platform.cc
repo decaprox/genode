@@ -126,7 +126,7 @@ Platform::Sigma0::Sigma0(Cap_index* i) : Pager_object(0)
 	 * We use the Pager_object here in a slightly different manner,
 	 * just to tunnel the pager cap to the Platform_thread::start method.
 	 */
-	cap(reinterpret_cap_cast<Thread_capability>(Native_capability(i)));
+	cap(Native_capability(i));
 }
 
 
@@ -301,7 +301,8 @@ void Platform::_setup_mem_alloc()
 				/* XXX do not allocate page0 */
 				if (addr == 0) {
 					Fiasco::l4_task_unmap(Fiasco::L4_BASE_TASK_CAP,
-					                      Fiasco::l4_fpage(0, log2_size, 0),
+					                      Fiasco::l4_fpage(0, log2_size,
+					                                       Fiasco::L4_FPAGE_RW),
 					                      Fiasco::L4_FP_ALL_SPACES);
 					continue;
 				}

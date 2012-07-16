@@ -8,7 +8,7 @@ VERBOSE        ?= @
 ECHO            = @echo
 TARGET         ?= l4linux
 
-PATCH-l4linux   = patches/l4lx_genode.patch
+PATCH-l4linux   = patches/l4lx_genode.patch patches/icmp_align.patch
 REV-l4linux     = 23
 REPO-l4linux    = http://svn.tudos.org/repos/oc/l4linux/trunk
 
@@ -16,11 +16,20 @@ PATCH-l4android = patches/l4android_genode.patch
 REV-l4android   = 90ca43bd629452ffd38d85fe8c976f069b5bb3d9
 REPO-l4android  = git://git.l4android.org/kernel.git
 
+#
+# Utility to check if a tool is installed
+#
+check_tool = $(if $(shell which $(1)),,$(error Need to have '$(1)' installed.))
+
+$(call check_tool,patch)
+
 ifeq ($(TARGET), l4android)
+$(call check_tool,git)
 DIFF   = git diff
 UPDATE = cd $(REAL_CONTRIB_DIR)/l4android; git fetch; git reset --hard $(REV-l4android)
 PATCH  = patch -p1
 else
+$(call check_tool,svn)
 DIFF   = svn diff
 UPDATE = svn up -r $(REV-l4linux) $(REAL_CONTRIB_DIR)/l4linux
 PATCH  = patch -p0
@@ -53,7 +62,7 @@ help:
 prepare: clean
 	$(VERBOSE)$(UPDATE)
 	$(ECHO) "applying patches to '$(REAL_CONTRIB_DIR)/$(TARGET)'"
-	$(VERBOSE)$(PATCH) -d $(REAL_CONTRIB_DIR)/$(TARGET) -i $(realpath $(PATCH-$(TARGET)))
+	$(VERBOSE)for i in $(PATCH-$(TARGET)); do $(PATCH) -d $(REAL_CONTRIB_DIR)/$(TARGET) < $$i; done
 	$(VERBOSE)ln -s $(shell pwd)/src/drivers $(REAL_CONTRIB_DIR)/$(TARGET)/arch/l4/drivers
 	$(ECHO)
 	$(ECHO) "Preparation completed!"

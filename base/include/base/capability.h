@@ -180,7 +180,7 @@ namespace Genode {
 
 			/*
 			 * Suppress warning about uninitialized 'ret' variable in 'call'
-			 * functions on compilers that support the #praga. If this is
+			 * functions on compilers that support the #pragma. If this is
 			 * not the case, the pragma can be masked by supplying the
 			 * 'SUPPRESS_GCC_PRAGMA_WUNINITIALIZED' define to the compiler.
 			 */
@@ -293,15 +293,12 @@ namespace Genode {
 	Capability<RPC_INTERFACE>
 	reinterpret_cap_cast(Untyped_capability const &untyped_cap)
 	{
-		Capability<RPC_INTERFACE> typed_cap;
-
 		/*
 		 * The object layout of untyped and typed capabilities is identical.
-		 * Hence we can use memcpy to load the values of the supplied untyped
-		 * capability into a typed capability.
+		 * Hence we can just use it's copy-constructors.
 		 */
-		::Genode::memcpy(&typed_cap, &untyped_cap, sizeof(untyped_cap));
-		return typed_cap;
+		Untyped_capability *ptr = const_cast<Untyped_capability*>(&untyped_cap);
+		return *static_cast<Capability<RPC_INTERFACE>*>(ptr);
 	}
 
 

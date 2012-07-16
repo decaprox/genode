@@ -29,7 +29,8 @@ namespace Genode {
 	typedef List<Ram_session_component> Ram_ref_account_members;
 
 	class Ram_session_component : public Rpc_object<Ram_session>,
-	                              public Ram_ref_account_members::Element
+	                              public Ram_ref_account_members::Element,
+	                              public Dataspace_owner
 	{
 		private:
 
@@ -102,7 +103,6 @@ namespace Genode {
 			 */
 			void _clear_ds(Dataspace_component *ds);
 
-
 		public:
 
 			/**
@@ -134,12 +134,10 @@ namespace Genode {
 			 */
 			~Ram_session_component();
 
-
 			/**
 			 * Accessors
 			 */
 			Ram_session_component *ref_account() { return _ref_account; }
-
 
 			/**
 			 * Register quota donation at allocator guard
@@ -151,7 +149,7 @@ namespace Genode {
 			 ** RAM Session interface **
 			 ***************************/
 
-			Ram_dataspace_capability alloc(size_t);
+			Ram_dataspace_capability alloc(size_t, bool);
 			void free(Ram_dataspace_capability);
 			int ref_account(Ram_session_capability);
 			int transfer_quota(Ram_session_capability, size_t);

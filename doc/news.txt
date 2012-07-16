@@ -4,6 +4,106 @@
                                ===========
 
 
+Interview in Revista Espírito Livre magazine | 2012-06-20
+#########################################################
+
+| Issue 36 of the Brazilian Revista Espírito Livre magazine features a
+| comprehensive interview with Norman Feske. _(update: english version)_
+
+The Brazilian Revista Espírito Livre is a magazine dedicated to Free and
+Open-Source software. With current issue 36, the Portuguese language magazine
+explores controversial questions about Internet freedom, privacy, neutrality
+among others. Genode seemingly represents a possible technical answer to some
+of these questions. In the comprehensive interview starting at page 35,
+co-founder of Genode Norman Feske talks about the background and motivation
+behind the project, describes the current structure of the community, and
+outlines his vision of the next generation of operating systems.
+
+[http://www.revista.espiritolivre.org/lancada-edicao-n-36-da-revista-espirito-livre - Issue 36 of the Revista Espírito Livre...]
+
+[http:/about/interview_rel36 - English version of the interview...]
+
+
+Genode OS Framework release 12.05 | 2012-05-30
+##############################################
+
+| The highlights of version 12.05 are our new USB stack, added media replay
+| capabilities, new support for dynamic system re-configuration,
+| and the ability to run the GNU tool chain on Genode.
+
+The just released version 12.05 is another corner stone for our plan to shape
+Genode into a general-purpose OS for the everyday use by its developers. It
+introduces numerious features that are crucial for this goal, in particular the
+groundwork for the use of file systems, the ability to execute the GNU tool
+chain directly on a Genode system, and a way to flexibly adapt the behaviour of
+operating-system components at runtime.
+
+In addition to working on the functionality outlined above, several of the
+framework's base platforms have received close attention. We profoundly
+revisited the platform-specific code for the Fiasco.OC kernel to fully leverage
+the kernel's capability concept. To facilitate the use of Genode as component
+framework on Linux, we extended the possibilities to use Linux-specific
+mechanisms, in particular chroot, in a way that is easy to use and coherent
+with the framework's architecture.
+
+For the full story behind all the new features and improvements, please
+refer to the
+[http:/documentation/release-notes/12.05 - release notes of version 12.05...]
+
+
+Genode participation at GSoC 2012 | 2012-04-25
+##############################################
+
+| Tobias Börtitz steps up to the challenge of combining the HelenOS kernel
+| with the Genode userland.
+
+Google has announced the list of scholarships accepted for this year's Google
+Summer of Code program. Thanks to HelenOS being an accepted mentoring
+organization, we are happy to announce the project of Tobias Börtitz, who will
+bring the worlds of HelenOS and Genode closer together:
+
+:[http://trac.helenos.org/ticket/419 - HelenOS as a Genode platform]:
+
+Genode Labs will support Tobias on his quest. His mentor will be long-time
+Genode developer Stefan Kalkowski. We are looking forward to working together
+on this intriguing topic!
+
+
+New dynamic run-time configuration support | 2012-04-11
+#######################################################
+
+| A new mechanism for re-configuring subsystems at run-time paves the way
+| to sophisticated general-purpose usage scenarios.
+
+Genode's approach to system configuration facilitates a unified way for
+supplying parameters to individual components as well as to entire subsystems.
+Thanks to the recursive nature of Genode, complex system-integration problems
+can be segregated into multiple problems of low complexity whereas each partial
+problem retains to be individually testable. Thereby, this solution greatly
+mitigates the manual labour of system integration even for highly complex
+scenarios.
+
+However, until now, the mechanism was limited to supplying
+configuration parameters at the creation time of components. Once
+a component is running, it was expected to adhere to a fixed predefined policy.
+With Genode's move towards general-purpose computing, many use cases are
+popping up where this limitation becomes a hindrance, for example the
+dynamic changing of screen resolutions, mixer settings, user-input calibration,
+and GUI policies.
+
+To accommodate such use cases, we have extended Genode's configuration
+concept with support for re-configuring components at runtime. The
+new feature has landed in the master branch just now:
+
+:[https://github.com/genodelabs/genode/commit/9a00ad7ae3ac8e4fd4867555db7671df34aac882 - Commit introducing dynamic re-configuration]:
+
+In addition to alleviating the problems mentioned above, the new mechanism
+enables many new opportunities to use Genode's slave pattern in creative
+ways. To illustrate how this is supposed to work, the commit contains
+examples for dynamically generating configuration data by a separate
+service as well as by the master of a slave component.
+
+
 GSoC 2012 application rejected | 2012-03-17
 ###########################################
 
@@ -430,7 +530,7 @@ VFAT partitions. The ARM support has been extended to cover both L4Linux (on
 Fiasco.OC) and Qt4 (ARMv6, ARMv7). Furthermore, the new version is accompanied
 with a comprehensive documentation update.
 
-Read [http:documentation/release-notes/11.08 - the full story]
+Read [http:/documentation/release-notes/11.08 - the full story]
 about the various improvements that come with the version 11.08...
 
 
@@ -983,13 +1083,13 @@ for graphics, input devices, and sound. It is often used as back end for games,
 emulators, and media players. Also the Linux version of Genode relies on the
 hardware abstractions provided by libSDL.
 
-As [http:/community/viewml?msg_name=4978DC53.3090409%40torfbruecke.net&amp;forum_name=genode-main - announced on the Genode mailing list],
+As [http://sourceforge.net/mailarchive/message.php?msg_id=21406424 - announced on the Genode mailing list],
 libSDL has been ported to Genode. At the current stage, the port supports
 the video subsystem and the input handling for mouse and keyboard. With
 libSDL now becoming available for Genode, it becomes much easier to make the
 wealth of libSDL-based applications available on our platform.
 
-[http:/community/viewml?msg_name=4978DC53.3090409%40torfbruecke.net&amp;forum_name=genode-main - Read the announcement...]
+[http://sourceforge.net/mailarchive/message.php?msg_id=21406424 - Read the announcement...]
 
 
 Genode on the L4ka::Pistachio kernel | 2008-12-18
@@ -1044,7 +1144,7 @@ base API by a number of exciting feature such as support for asynchronous
 notifications, capability typification, and managed dataspaces.
 
 Learn more about all the new features and changes described in our comprehensive
-[http:/documentation/release-notes/release_notes-08-11 - release notes...]
+[http:/documentation/release-notes/8.11 - release notes...]
 
 [http:/download/latest-release - Download the release 8.11 of the Genode OS Framework...]
 

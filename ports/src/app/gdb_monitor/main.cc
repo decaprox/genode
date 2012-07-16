@@ -62,8 +62,26 @@ int main()
 		return -1;
 	}
 
-	/* reserve some memory for gdb_monitor and give the rest to the child */
-	Number_of_bytes ram_quota = env()->ram_session()->avail() - 2*1024*1024;
+	/* extract target node from config file */
+	Xml_node target_node = config()->xml_node().sub_node("target");
+
+	/*
+	 * preserve the configured amount of memory for gdb_monitor and give the
+	 * remainder to the child
+	 */
+	Number_of_bytes preserved_ram_quota = 0;
+	try {
+		Xml_node preserve_node = config()->xml_node().sub_node("preserve");
+		if (preserve_node.attribute("name").has_value("RAM"))
+			preserve_node.attribute("quantum").value(&preserved_ram_quota);
+		else
+			throw Xml_node::Exception();
+	} catch (...) {
+		PERR("Error: could not find a valid <preserve> config node");
+		return -1;
+	}
+
+	Number_of_bytes ram_quota = env()->ram_session()->avail() - preserved_ram_quota;
 
 	/* start the application */
 	char *unique_name = filename;
@@ -99,7 +117,8 @@ int main()
 	                              ram.cap(),
 	                              &cap_session,
 	                              &parent_services,
-	                              &child_root_ep);
+	                              &child_root_ep,
+	                              target_node);
 	sleep_forever();
 
 	return 0;

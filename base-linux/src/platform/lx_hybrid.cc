@@ -48,6 +48,16 @@ __attribute__((constructor(101))) void lx_hybrid_init()
 	lx_environ = environ;
 }
 
+/*
+ * Dummy symbols to let generic tests programs (i.e., 'test-config_args') link
+ * successfully. Please note that such programs are not expected to work when
+ * built as hybrid Linux/Genode programs because when using the glibc startup
+ * code, we cannot manipulate argv prior executing main. However, by defining
+ * these symbols, we prevent the automated build bot from stumbling over such
+ * binaries.
+ */
+char **genode_argv = 0;
+int    genode_argc = 1;
 
 /************
  ** Thread **
@@ -156,6 +166,11 @@ static void adopt_thread(Thread_meta_data *meta_data)
 	 * transparently retried after a signal gets received.
 	 */
 	lx_sigaction(LX_SIGUSR1, empty_signal_handler);
+
+	/*
+	 * Prevent children from becoming zombies. (SIG_IGN = 1)
+	 */
+	lx_sigaction(LX_SIGCHLD, (void (*)(int))1);
 
 	/* assign 'Thread_meta_data' pointer to TLS entry */
 	pthread_setspecific(tls_key(), meta_data);

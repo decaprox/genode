@@ -48,17 +48,20 @@ set config {
 		<any-service> <parent/> <any-child/> </any-service>
 	</default-route>
 	<start name="timer">
-		<resource name="RAM" quantum="512K"/>
+		<resource name="RAM" quantum="1M"/>
 		<provides> <service name="Timer"/> </provides>
 	</start>
 	<start name="test-libc_ffat">
 		<resource name="RAM" quantum="2M"/>
+		<config>
+			<iterations value="1"/>
+		</config>
 	</start>
 }
 
 append_if [have_spec pci] config {
 	<start name="pci_drv">
-		<resource name="RAM" quantum="1M"/>
+		<resource name="RAM" quantum="2M"/>
 		<provides> <service name="PCI"/> </provides>
 	</start>
 	<start name="atapi_drv">

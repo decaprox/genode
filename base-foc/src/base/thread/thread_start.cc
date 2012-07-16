@@ -57,9 +57,18 @@ void Thread_base::start()
 	_tid = state.kcap;
 	_context->utcb = state.utcb;
 
-	l4_utcb_tcr_u(state.utcb)->user[UTCB_TCR_BADGE]      = state.id;
-	l4_utcb_tcr_u(state.utcb)->user[UTCB_TCR_THREAD_OBJ] = (addr_t)this;
-	cap_map()->insert(state.id, state.kcap);
+	try {
+		l4_utcb_tcr_u(state.utcb)->user[UTCB_TCR_BADGE]      = state.id;
+		l4_utcb_tcr_u(state.utcb)->user[UTCB_TCR_THREAD_OBJ] = (addr_t)this;
+
+		/* there might be leaks in the application */
+		cap_map()->remove(cap_map()->find(state.id));
+
+		/* we need to manually increase the reference counter here */
+		cap_map()->insert(state.id, state.kcap)->inc();
+	} catch(Cap_index_allocator::Region_conflict) {
+		PERR("could not insert id %x", state.id);
+	}
 
 	/* register initial IP and SP at core */
 	addr_t thread_sp = (addr_t)&_context->stack[-4];

@@ -1,13 +1,9 @@
-if {![have_spec x86_32]} {
-	puts "\nNoux is supported on the x86_32 architecture only\n"
-	exit 0
-}
 if {[have_spec linux]} {
 	puts "\nLinux not supported because of missing UART driver\n"
 	exit 0
 }
 
-build "core init drivers/timer drivers/uart noux lib/libc_noux noux-pkg/coreutils"
+build "core init drivers/timer drivers/uart noux/minimal lib/libc_noux noux-pkg/coreutils"
 
 # strip coreutils binaries and create tar archive
 exec sh -c "[cross_dev_prefix]strip bin/coreutils/bin/*"
@@ -34,7 +30,7 @@ install_config {
 			<any-service> <any-child/> <parent/> </any-service>
 		</default-route>
 		<start name="timer">
-			<resource name="RAM" quantum="512K"/>
+			<resource name="RAM" quantum="1M"/>
 			<provides><service name="Timer"/></provides>
 		</start>
 		<start name="uart_drv">
@@ -47,7 +43,7 @@ install_config {
 		<start name="noux">
 			<resource name="RAM" quantum="1G"/>
 			<config>
-				<fstab> <tar name="coreutils.tar" at="/"/> </fstab>
+				<fstab> <tar name="coreutils.tar" /> </fstab>
 				<start name="/bin/ls"> <arg value="-Rla"/> </start>
 			</config>
 		</start>
@@ -69,7 +65,12 @@ append qemu_args " -nographic"
 append qemu_args " -serial mon:stdio"
 append qemu_args " -serial file:$noux_output_file"
 
-run_genode_until "child exited with exit value 0.*\n" 20
+if {[have_spec x86_64]} {
+        # coreutils.tar is really huge when built for x86_64
+        append qemu_args " -m 300 "
+}
+
+run_genode_until "child exited with exit value 0.*\n" 30
 
 puts "[exec cat $noux_output_file]"
 

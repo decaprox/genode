@@ -53,16 +53,19 @@ namespace Genode
 
 			enum { INVALID_ID = -1, UNUSED = 0 };
 
-			uint16_t _id; /* global capability id */
+			uint8_t  _ref_cnt; /* reference counter    */
+			uint16_t _id;      /* global capability id */
 
 		public:
 
-			Cap_index() : _id(INVALID_ID) { }
+			Cap_index() : _ref_cnt(0), _id(INVALID_ID) { }
 
 			bool     valid() const   { return _id != INVALID_ID; }
 			bool     used()  const   { return _id != UNUSED;     }
 			uint16_t id()    const   { return _id;               }
 			void     id(uint16_t id) { _id = id;                 }
+			uint8_t  inc();
+			uint8_t  dec();
 			addr_t   kcap();
 
 			void* operator new    (size_t size, Cap_index* idx) { return idx; }
@@ -233,6 +236,20 @@ namespace Genode
 			 *              when allocation failed
 			 */
 			Cap_index* insert(int id, addr_t kcap);
+
+			/**
+			 * Create and insert a new Cap_index with a specific capability id
+			 * and map from given kcap to newly allocated one
+			 *
+			 * Allocation of the Cap_index is done via the global
+			 * Cap_index_allocator, which might throw exceptions that aren't
+			 * caught by this method
+			 *
+			 * \param  id the global capability id
+			 * \return    pointer to the new Cap_index object, or zero
+			 *            when allocation failed
+			 */
+			Cap_index* insert_map(int id, addr_t kcap);
 
 			/**
 			 * Remove a Cap_index object

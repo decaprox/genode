@@ -318,7 +318,8 @@ void Rm_faulter::continue_after_resolved_fault()
 Rm_session::Local_addr
 Rm_session_component::attach(Dataspace_capability ds_cap, size_t size,
                              off_t offset, bool use_local_addr,
-                             Rm_session::Local_addr local_addr)
+                             Rm_session::Local_addr local_addr,
+                             bool executable)
 {
 	/* serialize access */
 	Lock::Guard lock_guard(_lock);
@@ -682,11 +683,34 @@ Rm_session::State Rm_session_component::state()
 
 void Rm_session_component::dissolve(Rm_client *cl)
 {
-	Lock::Guard lock_guard(_lock);
-	_pager_ep->dissolve(cl);
-	_clients.remove(cl);
+	{
+		Lock::Guard lock_guard(_lock);
+		_pager_ep->dissolve(cl);
+		_clients.remove(cl);
+	}
+
+	/*
+	 * Rm_client is derived from Pager_object. If the Pager_object is also
+	 * derived from Thread_base then the Rm_client object must be
+	 * destructed without holding the rm_session_object lock. The native
+	 * platform specific Thread_base implementation has to take care that
+	 * all in-flight page handling requests are finished before
+	 * destruction. (Either by waiting until the end of or by
+	 * <deadlock free> cancellation of the last in-flight request.
+	 * This operation can also require taking the rm_session_object lock.
+	 *
+	 * Since _client_slab insertion/deletion also must be performed
+	 * synchronized but can't be protected by the rm_session_object lock
+	 * because of the described potential dead_lock situation, we have
+	 * to use a synchronized allocator object to perform insertion and 
+	 * deletion of Rm_clients.
+	 */
 	destroy(&_client_slab, cl);
 }
+
+
+static Dataspace_capability _type_deduction_helper(Dataspace_capability cap) {
+	return cap; }
 
 
 Rm_session_component::Rm_session_component(Rpc_entrypoint   *ds_ep,
@@ -701,7 +725,7 @@ Rm_session_component::Rm_session_component(Rpc_entrypoint   *ds_ep,
 	_md_alloc(md_alloc, ram_quota),
 	_client_slab(&_md_alloc), _ref_slab(&_md_alloc),
 	_map(&_md_alloc), _pager_ep(pager_ep),
-	_ds(this, vm_size), _ds_cap(ds_ep->manage(&_ds))
+	_ds(this, vm_size), _ds_cap(_type_deduction_helper(ds_ep->manage(&_ds)))
 {
 	/* configure managed VM area */
 	_map.add_range(vm_start, vm_size);
@@ -723,13 +747,11 @@ Rm_session_component::~Rm_session_component()
 	}
 
 	/* remove all clients */
-	while (Rm_client *cl = _client_slab.first_object()) {
-		_pager_ep->dissolve(cl);
+	while (Rm_client *cl = _client_slab.raw()->first_object()) {
 		_lock.unlock();
 		cl->dissolve_from_faulting_rm_session();
+		this->dissolve(cl);
 		_lock.lock();
-		_clients.remove(cl);
-		destroy(&_client_slab, cl);
 	}
 
 	/* detach all regions */

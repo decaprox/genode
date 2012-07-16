@@ -104,10 +104,17 @@ void Thread_base::_deinit_platform_thread()
 	Nova::revoke(Nova::Obj_crd(_tid.sc_sel, 0));
 	Nova::revoke(Nova::Obj_crd(_tid.ec_sel, 0));
 	Nova::revoke(Nova::Obj_crd(_tid.rs_sel, 0));
+	Nova::revoke(Nova::Obj_crd(_tid.exc_pt_sel, Nova::NUM_INITIAL_PT_LOG2));
+
+	cap_selector_allocator()->free(_tid.ec_sel, 0);
+	cap_selector_allocator()->free(_tid.sc_sel, 0);
+	cap_selector_allocator()->free(_tid.rs_sel, 0);
+	cap_selector_allocator()->free(_tid.exc_pt_sel, Nova::NUM_INITIAL_PT_LOG2);
 
 	/* revoke utcb */
 	Nova::Rights rwx(true, true, true);
-	Nova::revoke(Nova::Mem_crd((unsigned)Thread_base::myself()->utcb() >> 12, 0, rwx));
+	addr_t utcb = reinterpret_cast<addr_t>(&_context->utcb);
+	Nova::revoke(Nova::Mem_crd(utcb >> 12, 0, rwx));
 }
 
 

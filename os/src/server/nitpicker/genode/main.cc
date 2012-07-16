@@ -30,6 +30,7 @@
 #include <framebuffer_session/connection.h>
 #include <nitpicker_gfx/pixel_rgb565.h>
 #include <os/session_policy.h>
+#include <os/config.h>
 
 /* local includes */
 #include "big_mouse.h"
@@ -790,9 +791,12 @@ class Input_handler_component : public Genode::Rpc_object<Input_handler,
 
 				/* update mouse cursor */
 				if (old_mouse_pos != new_mouse_pos)
-					_user_state->viewport(_mouse_cursor,
+				{
+					if (_mouse_cursor)
+						_user_state->viewport(_mouse_cursor,
 					                      Rect(new_mouse_pos, _mouse_size),
 					                      Point(), true);
+				}
 
 				/* flush dirty pixels to physical frame buffer */
 				if (_flush_merger->defer == false) {
@@ -819,6 +823,30 @@ class Input_handler_component : public Genode::Rpc_object<Input_handler,
 
 typedef Pixel_rgb565 PT;  /* physical pixel type */
 
+
+static bool read_config_param(const char *attribute, bool default_value)
+{
+	using namespace Genode;
+
+	bool result = default_value;
+
+	try {
+		char buf[256];
+		config()->xml_node().attribute(attribute).value(buf, sizeof(buf));
+
+		Genode::printf("config %s=%s\n", attribute, buf);
+
+		if (!strcmp(buf, "yes")) result = true;
+		if (!strcmp(buf, "true")) result = true;
+		if (!strcmp(buf, "on")) result = true;
+
+		if (!strcmp(buf, "no")) result = false;
+		if (!strcmp(buf, "false")) result = false;
+		if (!strcmp(buf, "off")) result = false;
+	} catch (...) {
+	}
+	return result;
+}
 
 int main(int argc, char **argv)
 {
@@ -855,26 +883,47 @@ int main(int argc, char **argv)
 	void *fb_base = env()->rm_session()->attach(fb_ds_cap);
 	Screen<PT> screen((PT *)fb_base, Area(mode.width(), mode.height()));
 
-	enum { MENUBAR_HEIGHT = 16 };
-	PT *menubar_pixels = (PT *)env()->heap()->alloc(sizeof(PT)*mode.width()*16);
-	Chunky_menubar<PT> menubar(menubar_pixels, Area(mode.width(), MENUBAR_HEIGHT));
+	bool menubar_enabled = read_config_param("menubar", "on");
+	bool cursor_enabled = read_config_param("mouse_cursor", "on");
 
-	User_state user_state(&screen, &menubar);
+	int menubar_height = 0;
+
+	PT *menubar_pixels = 0;
+	Chunky_menubar<PT> *menubar = 0;
+
+	if (menubar_enabled)
+	{
+		menubar_height = 16;
+		menubar_pixels = (PT *)env()->heap()->alloc(sizeof(PT)*mode.width()*16);
+		static Chunky_menubar<PT> menubar_(menubar_pixels, Area(mode.width(), menubar_height));
+
+		menubar = &menubar_;
+	}
+
+	User_state user_state(&screen, menubar);
 
 	/*
 	 * Create view stack with default elements
 	 */
-	Area             mouse_size(big_mouse.w, big_mouse.h);
-	Mouse_cursor<PT> mouse_cursor((PT *)&big_mouse.pixels[0][0],
+
+	struct mouse_cursor *cursor = &no_mouse;
+
+	if (cursor_enabled)
+		cursor = &big_mouse;
+
+	Area             mouse_size(cursor->w, cursor->h);
+	Mouse_cursor<PT> mouse_cursor((PT *)&(cursor->pixels[0][0]),
 	                              mouse_size, &user_state);
 
-	menubar.state(user_state, "", "", BLACK);
+	if (menubar)
+		menubar->state(user_state, "", "", BLACK);
 
 	Background background(screen.size());
 
 	user_state.default_background(&background);
 	user_state.stack(&mouse_cursor);
-	user_state.stack(&menubar);
+	if (menubar)
+		user_state.stack(menubar);
 	user_state.stack(&background);
 
 	/*
@@ -886,7 +935,7 @@ int main(int argc, char **argv)
 	static Nitpicker::Root<PT> np_root(&ep, Area(mode.width(), mode.height()),
 	                                   &user_state, &sliced_heap,
 	                                   &screen, &framebuffer,
-	                                   MENUBAR_HEIGHT);
+	                                   menubar_height);
 
 	env()->parent()->announce(ep.manage(&np_root));
 

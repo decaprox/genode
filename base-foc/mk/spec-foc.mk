@@ -36,6 +36,8 @@ CC_OPT += -DL4SYS_USE_UTCB_WRAP=1
 STARTUP_LIB ?= startup
 PRG_LIBS += $(STARTUP_LIB)
 
+CC_OPT += -D__FIASCO_OC__
+
 all:
 
 #

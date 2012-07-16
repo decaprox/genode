@@ -1,0 +1,23 @@
+/*
+ * \brief
+ * \author
+ * \date
+ */
+
+
+#ifndef _INCLUDE__PLATFORM__OVERO__ADS7846_DEFS_H_
+#define _INCLUDE__PLATFORM__OVERO__ADS7846_DEFS_H_
+
+enum {
+	OMAP3_GPIO4_PHYS = 0x49054000,
+	OMAP3_GPIO4_SIZE = 4*1024,
+
+	OMAP3_SPI1_PHYS = 0x48098000,
+	OMAP3_SPI1_SIZE = 4*1024,
+	/**
+	 * Interrupt lines
+	 */
+	ADS7846_IRQ = 32,
+};
+
+#endif /* _INCLUDE__PLATFORM__OVERO__ADS7846_DEFS_H_ */

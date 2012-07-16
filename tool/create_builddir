@@ -18,10 +18,22 @@ usage:
 	@echo
 	@echo "  create_builddir <platform> BUILD_DIR=<build-dir>"
 	@echo
-	@echo "  <platform>   can be 'linux_x86', 'fiasco_x86', 'pistachio_x86',"
-	@echo "               'okl4_x86', 'nova_x86', 'codezero_vpb926',"
-	@echo "               'mb_s3a_starter_kit', foc_x86_32', 'foc_x86_64',"
-	@echo "               'foc_pbxa9', 'foc_vea9x4', or 'lx_hybrid_x86'"
+	@echo "  <platform>   can be:"
+	@echo "                  'linux_x86'"
+	@echo "                  'fiasco_x86'"
+	@echo "                  'pistachio_x86'"
+	@echo "                  'okl4_x86'"
+	@echo "                  'nova_x86_32'"
+	@echo "                  'nova_x86_64'"
+	@echo "                  'codezero_vpb926'"
+	@echo "                  'mb_s3a_starter_kit'"
+	@echo "                  'foc_x86_32'"
+	@echo "                  'foc_x86_64'"
+	@echo "                  'foc_pbxa9'"
+	@echo "                  'foc_vea9x4'"
+	@echo "                  'foc_panda'"
+	@echo "                  'lx_hybrid_x86'"
+	@echo "                  'foc_overo'"
 	@echo
 	@echo "  <build-dir>  is the location of the build directory to create"
 	@echo
@@ -60,7 +72,7 @@ $(BUILD_DIR)/etc/build.conf::
 #
 # Supply -no-kvm argument to Qemu for kernels that are incompatible with KVM
 #
-ifeq ($(filter-out foc_x86_32 foc_x86_64 okl4_x86 nova_x86 pistachio_x86,$(PLATFORM)),)
+ifeq ($(filter-out foc_x86_32 foc_x86_64 okl4_x86 nova_x86_32 nova_x86_64 pistachio_x86,$(PLATFORM)),)
 $(BUILD_DIR)/etc/build.conf::
 	@cat $(BUILD_CONF).qemu_no_kvm >> $@
 endif
@@ -102,7 +114,7 @@ $(BUILD_DIR)/Makefile:
 #
 # Add 'ports-foc' repository to Fiasco.OC build directory
 #
-ifeq ($(filter-out foc_x86_32 foc_pbxa9,$(PLATFORM)),)
+ifeq ($(filter-out foc_x86_32 foc_pbxa9 foc_overo foc_vea9x4 foc_panda,$(PLATFORM)),)
 $(BUILD_DIR)/etc/build.conf::
 	@cat $(BUILD_CONF).ports-foc >> $@
 endif
@@ -110,9 +122,17 @@ endif
 #
 # Add x86 drivers repositories to x86 build directories
 #
-ifeq ($(filter-out foc_x86_32 okl4_x86 nova_x86 pistachio_x86 fiasco_x86,$(PLATFORM)),)
+ifeq ($(filter-out foc_x86_32 foc_x86_64 okl4_x86 nova_x86_32 nova_x86_64 pistachio_x86 fiasco_x86,$(PLATFORM)),)
 $(BUILD_DIR)/etc/build.conf::
 	@cat $(BUILD_CONF).drivers_x86 >> $@
+endif
+
+#
+# Add ARM drivers repositories to ARM build directories
+#
+ifeq ($(filter-out foc_panda,$(PLATFORM)),)
+$(BUILD_DIR)/etc/build.conf::
+	@cat $(BUILD_CONF).drivers_arm >> $@
 endif
 
 #
@@ -134,11 +154,20 @@ foc_x86_32::
 foc_x86_64::
 	@echo "SPECS = genode foc_x86_64" > $(BUILD_DIR)/etc/specs.conf
 
+nova_x86_32::
+	@echo "SPECS = genode nova_x86_32 x86_32" > $(BUILD_DIR)/etc/specs.conf
+
+nova_x86_64::
+	@echo "SPECS = genode nova_x86_64 x86_64" > $(BUILD_DIR)/etc/specs.conf
+
 foc_pbxa9::
 	@echo "SPECS = genode foc_pbxa9" > $(BUILD_DIR)/etc/specs.conf
 
 foc_vea9x4::
 	@echo "SPECS = genode foc_vea9x4" > $(BUILD_DIR)/etc/specs.conf
+
+foc_panda::
+	@echo "SPECS = genode foc_panda" > $(BUILD_DIR)/etc/specs.conf
 
 codezero_vpb926::
 	@echo "CODEZERO_DIR = $(GENODE_DIR)/base-codezero/contrib" > $(BUILD_DIR)/etc/codezero.conf
@@ -152,6 +181,9 @@ mb_ml507::
 lx_hybrid_x86::
 	@echo "CROSS_DEV_PREFIX =" > $(BUILD_DIR)/etc/tools.conf
 	@echo "SPECS += always_hybrid" >> $(BUILD_DIR)/etc/specs.conf
+
+foc_overo::
+	@echo "SPECS = genode foc_overo" > $(BUILD_DIR)/etc/specs.conf
 
 $(PLATFORM)::
 	@echo "successfully created build directory at $(BUILD_DIR)"

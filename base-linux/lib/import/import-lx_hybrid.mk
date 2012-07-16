@@ -7,7 +7,7 @@ include $(call select_from_repositories,lib/import/import-syscall.mk)
 # Manually supply all library search paths of the host compiler to our tool
 # chain.
 #
-HOST_LIB_SEARCH_DIRS = $(shell cc $(CC_MARCH) -print-search-dirs | grep libraries |\
+HOST_LIB_SEARCH_DIRS = $(shell LC_ALL="C" cc $(CC_MARCH) -print-search-dirs | grep libraries |\
                                sed "s/.*=//"   | sed "s/:/ /g" |\
                                sed "s/\/ / /g" | sed "s/\/\$$//")
 #
@@ -77,10 +77,17 @@ endif
 #
 # Use the host's startup codes, linker script, and dynamic linker
 #
+ifneq ($(filter hardening_tool_chain, $(SPECS)),)
+EXT_OBJECTS += $(shell cc $(CC_MARCH) -print-file-name=Scrt1.o)
+EXT_OBJECTS += $(shell cc $(CC_MARCH) -print-file-name=crti.o)
+EXT_OBJECTS += $(shell cc $(CC_MARCH) -print-file-name=crtbeginS.o)
+EXT_OBJECTS += $(shell cc $(CC_MARCH) -print-file-name=crtendS.o)
+else
 EXT_OBJECTS += $(shell cc $(CC_MARCH) -print-file-name=crt1.o)
 EXT_OBJECTS += $(shell cc $(CC_MARCH) -print-file-name=crti.o)
 EXT_OBJECTS += $(shell cc $(CC_MARCH) -print-file-name=crtbegin.o)
 EXT_OBJECTS += $(shell cc $(CC_MARCH) -print-file-name=crtend.o)
+endif
 EXT_OBJECTS += $(shell cc $(CC_MARCH) -print-file-name=crtn.o)
 EXT_OBJECTS += -lgcc -lgcc_s -lsupc++ -lc
 EXT_OBJECTS += -lpthread

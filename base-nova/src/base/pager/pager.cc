@@ -25,18 +25,12 @@ using namespace Nova;
 
 enum { PF_HANDLER_STACK_SIZE = 4096 };
 
-
-static Lock *pf_lock() { static Lock inst; return &inst; }
-
-
 void Pager_object::_page_fault_handler()
 {
 	Ipc_pager ipc_pager;
 	ipc_pager.wait_for_fault();
 
 	/* serialize page-fault handling */
-	pf_lock()->lock();
-
 	Thread_base *myself = Thread_base::myself();
 	if (!myself) {
 		PWRN("unexpected page-fault for non-existing pager object, going to sleep forever");
@@ -45,12 +39,14 @@ void Pager_object::_page_fault_handler()
 
 	Pager_object *obj = static_cast<Pager_object *>(myself);
 	int ret = obj->pager(ipc_pager);
-	pf_lock()->unlock();
 
 	if (ret) {
-		PWRN("page-fault resolution for for address 0x%lx failed, going to sleep forever",
-		     ipc_pager.fault_addr());
-		sleep_forever();
+		PWRN("page-fault resolution for address 0x%lx, ip=0x%lx failed",
+		     ipc_pager.fault_addr(), ipc_pager.fault_ip());
+		/* revoke paging capability */
+		Nova::revoke(Nova::Obj_crd(obj->exc_pt_sel() + PT_SEL_PAGE_FAULT, 0), true);
+		Utcb *utcb = (Utcb *)Thread_base::myself()->utcb();
+		utcb->set_msg_word(0);
 	}
 
 	ipc_pager.reply_and_wait_for_fault();
@@ -68,6 +64,7 @@ void Pager_object::_startup_handler()
 	utcb->eip = obj->_initial_eip;
 	utcb->esp = obj->_initial_esp;
 	utcb->mtd = Mtd::EIP | Mtd::ESP;
+	utcb->set_msg_word(0);
 	reply(Thread_base::myself()->stack_top());
 }
 
@@ -78,11 +75,12 @@ void Pager_object::_invoke_handler()
 	Pager_object *obj = static_cast<Pager_object *>(Thread_base::myself());
 
 	/* send single portal as reply */
-	int event = utcb->msg[0];
+	addr_t event = utcb->msg[0];
 	utcb->mtd = 0;
+	utcb->set_msg_word(0);
 
 	if (event == PT_SEL_STARTUP || event == PT_SEL_PAGE_FAULT)
-		utcb->append_item(Obj_crd(obj->_exc_pt_sel + event, 0), 0);
+		utcb->append_item(Obj_crd(obj->exc_pt_sel() + event, 0), 0);
 
 	reply(Thread_base::myself()->stack_top());
 }
@@ -94,8 +92,7 @@ void Pager_object::wake_up() { PDBG("not yet implemented"); }
 Pager_object::Pager_object(unsigned long badge)
 : Thread_base("pager", PF_HANDLER_STACK_SIZE), _badge(badge)
 {
-	_tid.ec_sel = cap_selector_allocator()->alloc();
-	unsigned pd_sel = cap_selector_allocator()->pd_sel();
+	addr_t pd_sel = cap_selector_allocator()->pd_sel();
 
 	enum { CPU_NO = 0, GLOBAL = false, EXC_BASE = 0 };
 
@@ -103,18 +100,15 @@ Pager_object::Pager_object(unsigned long badge)
 	mword_t  thread_utcb = (mword_t)  &_context->utcb;
 
 	/* create local EC */
-	int res = create_ec(_tid.ec_sel, pd_sel,
-	                    CPU_NO, thread_utcb,
-	                    (mword_t)thread_sp, /* <- delivered to the startup handler */
-	                    EXC_BASE, GLOBAL);
+	uint8_t res = create_ec(_tid.ec_sel, pd_sel,
+	                        CPU_NO, thread_utcb,
+	                        (mword_t)thread_sp, /* <- delivered to the startup handler */
+	                        EXC_BASE, GLOBAL);
 	if (res)
-		PDBG("create_ec returned %d", res);
-
-	/* allocate capability-selector range for event portals */
-	_exc_pt_sel = cap_selector_allocator()->alloc(NUM_INITIAL_PT_LOG2);
+		PERR("create_ec returned %d - utcb 0x%lx", res, thread_utcb);
 
 	/* create portal for page-fault handler */
-	res = create_pt(_exc_pt_sel + PT_SEL_PAGE_FAULT, pd_sel, _tid.ec_sel,
+	res = create_pt(exc_pt_sel() + PT_SEL_PAGE_FAULT, pd_sel, _tid.ec_sel,
 	                Mtd(Mtd::QUAL | Mtd::EIP), (mword_t)_page_fault_handler);
 	if (res) {
 		PERR("could not create page-fault portal, create_pt returned %d\n",
@@ -124,7 +118,7 @@ Pager_object::Pager_object(unsigned long badge)
 	}
 
 	/* create portal for startup handler */
-	res = create_pt(_exc_pt_sel + PT_SEL_STARTUP, pd_sel, _tid.ec_sel,
+	res = create_pt(exc_pt_sel() + PT_SEL_STARTUP, pd_sel, _tid.ec_sel,
 	                Mtd(Mtd::ESP | Mtd::EIP), (mword_t)_startup_handler);
 	if (res) {
 		PERR("could not create startup portal, create_pt returned %d\n",
@@ -143,15 +137,39 @@ Pager_object::Pager_object(unsigned long badge)
 	res = create_pt(_pt_sel, pd_sel, _tid.ec_sel, Mtd(0), (mword_t)_invoke_handler);
 	if (res)
 		PERR("could not create pager object identity, create_pt returned %d\n", res);
-}
 
+	_pt_cleanup = cap_selector_allocator()->alloc();
+	res = create_pt(_pt_cleanup, pd_sel, _tid.ec_sel, Mtd(0), (mword_t)_invoke_handler);
+	if (res)
+		PERR("could not create pager cleanup portal, create_pt returned %d\n", res);
+}
 
 Pager_object::~Pager_object()
 {
-	revoke(Obj_crd(_tid.ec_sel, 0));
-	/* revoke utcb */
-	Rights rwx(true, true, true);
-	revoke(Nova::Mem_crd((unsigned)Thread_base::myself()->utcb() >> 12, 0, rwx));
+	/* Revoke thread portals serving exceptions */
+	revoke(Obj_crd(exc_pt_sel(), NUM_INITIAL_PT_LOG2), true);
+	/* Revoke portal used as identity object */
+	revoke(Obj_crd(_pt_sel, 0), true);
+
+	/* Make sure nobody is in the handler anymore by doing an IPC to a
+	 * local cap pointing to same serving thread (if not running in the
+	 * context of the serving thread). When the call returns
+	 * we know that nobody is handled by this object anymore, because
+	 * all remotely available portals had been revoked beforehand.
+	 */
+	Utcb *utcb = (Utcb *)Thread_base::myself()->utcb();
+	if (reinterpret_cast<Utcb *>(&_context->utcb) != utcb) {
+		utcb->set_msg_word(0);
+		if (uint8_t res = call(_pt_cleanup))
+			PERR("failure - cleanup call failed res=%d", res);
+	}
+
+	/* Revoke portal used for the cleanup call */
+	revoke(Obj_crd(_pt_cleanup, 0), true);
+
+	cap_selector_allocator()->free(_pt_sel, 0);
+	cap_selector_allocator()->free(_pt_cleanup, 0);
+
 }
 
 
@@ -170,8 +188,13 @@ Pager_capability Pager_entrypoint::manage(Pager_object *obj)
 
 void Pager_entrypoint::dissolve(Pager_object *obj)
 {
-	pf_lock()->lock();
+	/* cleanup cap session */
+	_cap_session->free(obj->Object_pool<Pager_object>::Entry::cap());
+	if (obj->pt_sel() != 0UL + obj->Object_pool<Pager_object>::Entry::cap().dst()) {
+		cap_selector_allocator()->free(obj->Object_pool<Pager_object>::Entry::cap().dst(), 0);
+		revoke(Obj_crd(obj->Object_pool<Pager_object>::Entry::cap().dst(), 0), true);
+	}
+
 	remove(obj);
-	pf_lock()->unlock();
 }
 
