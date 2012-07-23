@@ -1,12 +1,12 @@
 /*
  * \brief  Gpio driver for the OMAP4
- * \author Ivan Loskutov
- * \date   2012-06-16
+ * \author Ivan Loskutov <ivan.loskutov@ksyslabs.org>
+ * \date   2012-06-23
  */
 
 /*
- * Copyright 2012 Ksys Labs LLC
- * Contact: <ivan.loskutov@ksyslabs.org>
+ * Copyright (C) 2012 Ksys Labs LLC
+ * Copyright (C) 2012 Genode Labs GmbH
  *
  * This file is part of the Genode OS framework, which is distributed
  * under the terms of the GNU General Public License version 2.
@@ -21,7 +21,8 @@
 #include <root/component.h>
 
 /* local includes */
-#include <driver.h>
+#include "driver.h"
+#include "irq_handler.h"
 
 
 /**
@@ -68,6 +69,8 @@ class Gpio::Session_component : public Genode::Rpc_object<Gpio::Session>
 
 		Driver &_driver;
 
+		Signal_context_capability _read_avail_sigh;
+
 	public:
 		Session_component(Driver &driver)
 		:
@@ -94,6 +97,46 @@ class Gpio::Session_component : public Genode::Rpc_object<Gpio::Session>
 		{
 			_driver.set_gpio_dataout(gpio, enable);
 		}
+
+		int get_datain(int gpio)
+		{
+			return _driver.get_gpio_datain(gpio);
+		}
+
+		void set_debounce_enable(int gpio, bool enable)
+		{
+			_driver.set_gpio_debounce_enable(gpio, enable);
+		}
+
+		void set_debouncing_time(int gpio, unsigned int us)
+		{
+			_driver.set_gpio_debouncing_time(gpio, us);
+		}
+
+		void set_falling_detect(int gpio, bool enable)
+		{
+			_driver.set_gpio_falling_detect(gpio, enable);
+		}
+
+		void set_rising_detect(int gpio, bool enable)
+		{
+			_driver.set_gpio_rising_detect(gpio, enable);
+		}
+
+		void set_irq_enable(int gpio, bool enable)
+		{
+			_driver.set_gpio_irq_enable(gpio, enable);
+		}
+
+		void register_signal(Genode::Signal_context_capability cap, int gpio)
+		{
+			_driver.register_signal(cap, gpio);
+		}
+
+		void unregister_signal(int gpio)
+		{
+			_driver.unregister_signal(gpio);
+		}
 };
 
 
@@ -101,9 +144,16 @@ int main(int, char **)
 {
 	using namespace Gpio;
 
-	static Driver driver;
-
 	printf("--- omap4 gpio driver ---\n");
+
+	Driver       driver;
+
+	Irq_handler  gpio1_irq(Driver::GPIO1_IRQ, driver);
+	Irq_handler  gpio2_irq(Driver::GPIO2_IRQ, driver);
+	Irq_handler  gpio3_irq(Driver::GPIO3_IRQ, driver);
+	Irq_handler  gpio4_irq(Driver::GPIO4_IRQ, driver);
+	Irq_handler  gpio5_irq(Driver::GPIO5_IRQ, driver);
+	Irq_handler  gpio6_irq(Driver::GPIO6_IRQ, driver);
 
 	/*
 	 * Initialize server entry point
@@ -123,7 +173,7 @@ int main(int, char **)
 	 */
 	env()->parent()->announce(ep.manage(&gpio_root));
 
-	sleep_forever();
+	Genode::sleep_forever();
 	return 0;
 }
 

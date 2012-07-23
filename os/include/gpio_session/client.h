@@ -1,12 +1,12 @@
 /*
  * \brief  Client-side Gpio session interface
- * \author Ivan Loskutov
- * \date   2012-06-16
+ * \author Ivan Loskutov <ivan.loskutov@ksyslabs.org>
+ * \date   2012-06-23
  */
 
 /*
- * Copyright 2012 Ksys Labs LLC
- * Contact: <ivan.loskutov@ksyslabs.org>
+ * Copyright (C) 2012 Ksys Labs LLC
+ * Copyright (C) 2012 Genode Labs GmbH
  *
  * This file is part of the Genode OS framework, which is distributed
  * under the terms of the GNU General Public License version 2.
@@ -39,6 +39,46 @@ namespace Gpio {
 		void set_dataout(int gpio, bool enable)
 		{
 			call<Rpc_set_dataout>(gpio, enable);
+		}
+
+		int get_datain(int gpio)
+		{
+			return call<Rpc_get_datain>(gpio);
+		}
+
+		void set_debounce_enable(int gpio, bool enable)
+		{
+			call<Rpc_set_debounce_enable>(gpio, enable);
+		}
+
+		void set_debouncing_time(int gpio, unsigned int us)
+		{
+			call<Rpc_set_debouncing_time>(gpio, us);
+		}
+
+		void set_falling_detect(int gpio, bool enable)
+		{
+			call<Rpc_set_falling_detect>(gpio, enable);
+		}
+
+		void set_rising_detect(int gpio, bool enable)
+		{
+			call<Rpc_set_rising_detect>(gpio, enable);
+		}
+
+		void set_irq_enable(int gpio, bool enable)
+		{
+			call<Rpc_set_irq_enable>(gpio, enable);
+		}
+
+		void register_signal(Genode::Signal_context_capability cap, int gpio)
+		{
+			call<Rpc_register_signal>(cap, gpio);
+		}
+
+		void unregister_signal(int gpio)
+		{
+			call<Rpc_unregister_signal>(gpio);
 		}
 	};
 }

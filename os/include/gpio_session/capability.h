@@ -1,12 +1,12 @@
 /*
  * \brief  Gpio session capability type
- * \author Ivan Loskutov
- * \date   2012-06-16
+ * \author Ivan Loskutov <ivan.loskutov@ksyslabs.org>
+ * \date   2012-06-23
  */
 
 /*
- * Copyright 2012 Ksys Labs LLC
- * Contact: <ivan.loskutov@ksyslabs.org>
+ * Copyright (C) 2012 Ksys Labs LLC
+ * Copyright (C) 2012 Genode Labs GmbH
  *
  * This file is part of the Genode OS framework, which is distributed
  * under the terms of the GNU General Public License version 2.
