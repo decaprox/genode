@@ -29,6 +29,13 @@
 #include <omap3fb_defs.h>
 #include <video_memory.h>
 
+#ifdef __FIASCO_OC__
+namespace Fiasco {
+	extern "C" {
+		#include <l4/sys/cache.h>
+	}
+}
+#endif
 
 unsigned char dummy;
 
