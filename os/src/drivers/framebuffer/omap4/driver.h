@@ -29,6 +29,8 @@ namespace Framebuffer {
 	class Driver;
 }
 
+static int verbose = 0;
+
 
 class Framebuffer::Driver
 {
@@ -148,11 +150,16 @@ bool Framebuffer::Driver::init(Framebuffer::Driver::Type   type,
 {
 	uint32_t val;
 
-	val = _dss.read<Dss::Revision>();
-	PDBG("OMAP4 DSS revision %x.%x\n", ((val >> 4) & 0x0F), (val & 0xF));
+	//
+	if (verbose) {
+		val = _dss.read<Dss::Revision>();
+		PDBG("OMAP4 DSS revision %x.%x\n", ((val >> 4) & 0x0F), (val & 0xF));
+	}
 
-	val = _dispc.read<Dispc::Revision>();
-	PDBG("OMAP4 DISPC revision %x.%x\n", ((val >> 4) & 0x0F), (val & 0xF));
+	if (verbose) {
+		val = _dispc.read<Dispc::Revision>();
+		PDBG("OMAP4 DISPC revision %x.%x\n", ((val >> 4) & 0x0F), (val & 0xF));
+	}
 
 	/* enable display core clock and set divider to 1 */
 	_dispc.write<Dispc::Divisor::Lcd>(1);

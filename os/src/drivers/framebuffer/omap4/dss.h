@@ -16,7 +16,12 @@ struct Dss : Genode::Mmio
 
 	struct Revision : Register<0x00, 32> { };
 
-	struct Sysstatus : Register<0x14, 32> { };
+	struct Sysstatus : Register<0x14, 32> {
+		struct Reset : Bitfield<0, 1>
+		{
+			enum { RESETDONE = 1 };
+		};
+	};
 
 	struct Ctrl : Register<0x40, 32>
 	{
