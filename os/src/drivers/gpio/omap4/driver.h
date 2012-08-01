@@ -30,7 +30,7 @@ namespace Gpio {
 	class Driver;
 }
 
-static int verbose = 1;
+static int verbose = 0;
 
 class Gpio::Driver
 {
@@ -146,9 +146,12 @@ class Gpio::Driver
 
 		inline void _irq_signal_send(int gpio)
 		{
-			PDBG("gpio=%d", gpio);
 			if (_transmitters[gpio])
+			{
+				if (verbose)
+					PDBG("gpio=%d", gpio);
 				_transmitters[gpio]->submit();
+			}
 		}
 
 		inline void _irq_event(int gpio_bank, uint32_t status)
@@ -197,7 +200,8 @@ Gpio::Driver::Driver()
 	for (int i = 0; i < NR_GPIOS; ++i)
 	{
 		uint32_t r = _gpio_bank[i]->read<Gpio_reg::Ctrl>();
-		PDBG("GPIO%d ctrl=%08x", i+1, r);
+		if (verbose)
+			PDBG("GPIO%d ctrl=%08x", i+1, r);
 	}
 }
 
@@ -350,6 +354,7 @@ bool Gpio::Driver::set_gpio_irq_enable(int gpio, bool enable)
 
 	if (enable)
 	{
+		gpio_reg->write<Gpio_reg::Irqstatus_0>(1 << _get_gpio_index(gpio));
 		gpio_reg->write<Gpio_reg::Irqstatus_set_0>(1 << _get_gpio_index(gpio));
 		irq_enabled[gpio] = true;
 	}
