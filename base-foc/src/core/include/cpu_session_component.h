@@ -53,7 +53,7 @@ namespace Genode {
 
 		public:
 
-			Cpu_thread_component(const char *name, unsigned priority)
+			Cpu_thread_component(const char *name, unsigned priority, addr_t)
 			: _platform_thread(name, priority), _bound(false) { }
 
 
@@ -80,8 +80,8 @@ namespace Genode {
 			Rpc_entrypoint            *_thread_ep;
 			Pager_entrypoint          *_pager_ep;
 			Allocator_guard            _md_alloc;          /* guarded meta-data allocator */
-			Cpu_thread_allocator       _slab;              /* meta-data allocator */
-			Lock                       _slab_lock;         /* protect slab access */
+			Cpu_thread_allocator       _thread_alloc;      /* meta-data allocator */
+			Lock                       _thread_alloc_lock; /* protect alloc access */
 			List<Cpu_thread_component> _thread_list;
 			Lock                       _thread_list_lock;  /* protect thread list */
 			unsigned                   _priority;          /* priority of threads
@@ -127,7 +127,8 @@ namespace Genode {
 			 ** CPU session interface **
 			 ***************************/
 
-			Thread_capability create_thread(Name const &);
+			Thread_capability create_thread(Name const &, addr_t);
+			Ram_dataspace_capability utcb(Thread_capability thread);
 			void kill_thread(Thread_capability);
 			Thread_capability first();
 			Thread_capability next(Thread_capability);
@@ -149,6 +150,45 @@ namespace Genode {
 			void enable_vcpu(Thread_capability, addr_t);
 			Native_capability native_cap(Thread_capability);
 			Native_capability alloc_irq();
+	};
+
+
+	class Cpu_session_irqs : public Avl_node<Cpu_session_irqs>
+	{
+		private:
+
+			enum { IRQ_MAX = 20 };
+
+			Cpu_session_component* _owner;
+			Native_capability      _irqs[IRQ_MAX];
+			unsigned               _cnt;
+
+		public:
+
+			Cpu_session_irqs(Cpu_session_component *owner)
+			: _owner(owner), _cnt(0) {}
+
+			bool add(Native_capability irq)
+			{
+				if (_cnt >= (IRQ_MAX - 1))
+					return false;
+				_irqs[_cnt++] = irq;
+				return true;
+			}
+
+			/************************
+			 ** Avl node interface **
+			 ************************/
+
+			bool higher(Cpu_session_irqs *c) { return (c->_owner > _owner); }
+
+			Cpu_session_irqs *find_by_session(Cpu_session_component *o)
+			{
+				if (o == _owner) return this;
+
+				Cpu_session_irqs *c = Avl_node<Cpu_session_irqs>::child(o > _owner);
+				return c ? c->find_by_session(o) : 0;
+			}
 	};
 }
 
