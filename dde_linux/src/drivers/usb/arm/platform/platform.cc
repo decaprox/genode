@@ -63,8 +63,6 @@ static struct ehci_hcd_omap_platform_data _ehci_data
 };
 
 
-
-
 /**
  * Enables USB clocks
  */
@@ -91,11 +89,8 @@ struct Clocks : Genode::Mmio
 	void dump()
 	{
 		Usb_host_clk::access_t a1 = read<Usb_host_clk>();
-		PDBG("Host clock %x", a1);
 		Usb_tll_clk::access_t a3 = read<Usb_tll_clk>();
-		PDBG("TLL: %x", a3);
 		Usb_phy_clk::access_t a4 = read<Usb_phy_clk>();
-		PDBG("Phy: %x", a4);
 	}
 };
 
@@ -310,7 +305,7 @@ void platform_hcd_init(Services *services)
 	/*
 	 * Needed for DMA buffer allocation. See 'hcd_buffer_alloc' in 'buffer.c'
 	 */
-	static u64 dma_mask = ~(u32)0;
+	static u64 dma_mask = ~(u64)0;
 	pdev->dev.dma_mask = &dma_mask;
 	pdev->dev.coherent_dma_mask = ~0;
 

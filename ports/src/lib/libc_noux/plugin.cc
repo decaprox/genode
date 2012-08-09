@@ -583,6 +583,8 @@ namespace {
 			ssize_t sendto(Libc::File_descriptor *, const void *, size_t, int,
 				       const struct sockaddr *, socklen_t);
 			ssize_t recv(Libc::File_descriptor *, void *, ::size_t, int);
+			ssize_t recvfrom(Libc::File_descriptor *, void *, ::size_t, int,
+			                 struct sockaddr *, socklen_t*);
 			int getsockopt(Libc::File_descriptor *, int, int, void *,
 				       socklen_t *);
 			int setsockopt(Libc::File_descriptor *, int , int , const void *,
@@ -662,7 +664,7 @@ namespace {
 	{
 		Genode::size_t sum_read_count = 0;
 
-		while (count) {
+		while (count > 0) {
 
 			Genode::size_t curr_count =
 				Genode::min(count, sizeof(sysio()->read_out.chunk));
@@ -676,11 +678,13 @@ namespace {
 				return -1;
 			}
 
-			Genode::memcpy(buf, sysio()->read_out.chunk, sysio()->read_out.count);
+			Genode::memcpy((char*)buf + sum_read_count,
+			               sysio()->read_out.chunk,
+			               sysio()->read_out.count);
 
 			sum_read_count += sysio()->read_out.count;
 
-			if (sysio()->read_out.count < sysio()->read_in.count)
+			if (sysio()->read_out.count < curr_count)
 				break; /* end of file */
 
 			if (sysio()->read_out.count <= count)
@@ -981,8 +985,10 @@ namespace {
 	{
 		sysio()->fchdir_in.fd = noux_fd(fd->context);
 		if (!noux()->syscall(Noux::Session::SYSCALL_FCHDIR)) {
-			PERR("fchdir error");
-			/* XXX set errno */
+			switch (sysio()->error.fchdir) {
+				case Noux::Sysio::FCHDIR_ERR_NOT_DIR: errno = ENOTDIR; break;
+				default:                              errno = EPERM;  break;
+			}
 			return -1;
 		}
 
@@ -1324,9 +1330,9 @@ namespace {
 				return -1;
 			}
 
-			Genode::memcpy(buf, sysio()->recv_in.buf, sysio()->recv_in.len);
+			Genode::memcpy(buf, sysio()->recv_in.buf, sysio()->recv_out.len);
 
-			sum_recv_count += sysio()->recv_in.len;
+			sum_recv_count += sysio()->recv_out.len;
 
 			if (sysio()->recv_out.len < sysio()->recv_in.len)
 				break;
@@ -1341,17 +1347,61 @@ namespace {
 	}
 
 
+	ssize_t Plugin::recvfrom(Libc::File_descriptor *fd, void *buf, size_t len, int flags,
+	                         struct sockaddr *src_addr, socklen_t *addrlen)
+	{
+		Genode::size_t sum_recvfrom_count = 0;
+
+
+		while (len) {
+			Genode::size_t curr_len = Genode::min(len, sizeof(sysio()->recvfrom_in.buf));
+
+			sysio()->recv_in.fd = noux_fd(fd->context);
+			sysio()->recv_in.len = curr_len;
+
+			if (addrlen == NULL)
+				sysio()->recvfrom_in.addrlen = 0;
+			else
+				sysio()->recvfrom_in.addrlen = *addrlen;
+
+			if (!noux()->syscall(Noux::Session::SYSCALL_RECVFROM)) {
+				/* XXX set errno */
+				return -1;
+			}
+
+			if (src_addr != NULL && addrlen != NULL)
+				Genode::memcpy(src_addr, &sysio()->recvfrom_in.src_addr,
+					       sysio()->recvfrom_in.addrlen);
+
+
+			Genode::memcpy(buf, sysio()->recvfrom_in.buf, sysio()->recvfrom_out.len);
+
+			sum_recvfrom_count += sysio()->recvfrom_out.len;
+
+			if (sysio()->recvfrom_out.len < sysio()->recvfrom_in.len)
+				break;
+
+			if (sysio()->recvfrom_out.len <= len)
+				len -= sysio()->recvfrom_out.len;
+			else
+				break;
+		}
+
+		return sum_recvfrom_count;
+	}
+
+
 	ssize_t Plugin::send(Libc::File_descriptor *fd, const void *buf, ::size_t len, int flags)
 	{
 		/* remember original len for the return value */
 		int const orig_count = len;
 		char *src = (char *)buf;
 
-		sysio()->send_in.fd = noux_fd(fd->context);
 		while (len > 0) {
 
 			Genode::size_t curr_len = Genode::min(sizeof (sysio()->send_in.buf), len);
 
+			sysio()->send_in.fd = noux_fd(fd->context);
 			sysio()->send_in.len = curr_len;
 			Genode::memcpy(sysio()->send_in.buf, src, curr_len);
 
@@ -1376,9 +1426,6 @@ namespace {
 			return -1;
 		}
 
-		sysio()->sendto_in.addrlen = addrlen;
-		Genode::memcpy(&sysio()->sendto_in.dest_addr, dest_addr, addrlen);
-
 		/* wipe-out sendto buffer */
 		Genode::memset(sysio()->sendto_in.buf, 0, sizeof (sysio()->sendto_in.buf));
 
@@ -1389,6 +1436,15 @@ namespace {
 			sysio()->sendto_in.fd = noux_fd(fd->context);
 			sysio()->sendto_in.len = curr_len;
 			Genode::memcpy(sysio()->sendto_in.buf, src, curr_len);
+
+			if (addrlen == 0) {
+				sysio()->sendto_in.addrlen = 0;
+				Genode::memset(&sysio()->sendto_in.dest_addr, 0, sizeof (struct sockaddr));
+			}
+			else {
+				sysio()->sendto_in.addrlen = addrlen;
+				Genode::memcpy(&sysio()->sendto_in.dest_addr, dest_addr, addrlen);
+			}
 
 			if (!noux()->syscall(Noux::Session::SYSCALL_SENDTO)) {
 				return -1;
