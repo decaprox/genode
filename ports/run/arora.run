@@ -102,6 +102,7 @@ set boot_modules {
 	ld.lib.so
 	libc.lib.so libm.lib.so lwip.lib.so
 	zlib.lib.so libpng.lib.so jpeg.lib.so
+	libcrypto.lib.so libssl.lib.so
 	dejavusans.lib.so
 	freetype.lib.so
 	libc_lock_pipe.lib.so
