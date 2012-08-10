@@ -31,7 +31,8 @@ PATCHES = qt4_genode.patch \
           qt4_no_exit_on_window_close.patch \
           qt4_virtual_deletelater.patch \
           qt4_renderwidget.patch \
-          qt4_include_time_h.patch
+          qt4_include_time_h.patch \
+          qt4_openssl_libs.patch
 
 #
 # Utility to check if a tool is installed
