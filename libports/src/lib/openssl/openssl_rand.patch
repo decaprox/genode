@@ -1,0 +1,17 @@
+diff --git a/crypto/rand/rand_unix.c b/crypto/rand/rand_unix.c
+index e3a6557..31a2a40 100644
+--- a/crypto/rand/rand_unix.c
++++ b/crypto/rand/rand_unix.c
+@@ -216,6 +216,12 @@ int RAND_poll(void)
+ 	}
+ 	return 1;
+ }
++#elif defined(OPENSSL_SYS_GENODE)
++/* TODO: */
++int RAND_poll(void)
++	{
++	return 0;
++	}
+ #elif defined __OpenBSD__
+ int RAND_poll(void)
+ {

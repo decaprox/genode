@@ -11,7 +11,7 @@ OPENSSL_SRC     = src/lib/openssl
 #
 PORTS += $(OPENSSL)
 
-prepare-openssl: $(CONTRIB_DIR)/$(OPENSSL) include/openssl generate_asm
+prepare-openssl: $(CONTRIB_DIR)/$(OPENSSL) include/openssl
 
 #$(CONTRIB_DIR)/$(OPENSSL):
 
@@ -23,36 +23,20 @@ $(DOWNLOAD_DIR)/$(OPENSSL_TGZ):
 
 $(CONTRIB_DIR)/$(OPENSSL): $(DOWNLOAD_DIR)/$(OPENSSL_TGZ)
 	$(VERBOSE)tar xfz $< -C $(CONTRIB_DIR) && touch $@
-
-#
-# Generate ASM codes
-#
-
-generate_asm: $(OPENSSL_SRC)/x86_64/modexp512.s $(OPENSSL_SRC)/x86_64/rc4_md5.s
-
-$(OPENSSL_SRC)/x86_64/modexp512.s:
-	$(VERBOSE)perl $(CONTRIB_DIR)/$(OPENSSL)/crypto/bn/asm/modexp512-x86_64.pl \
-		$(CONTRIB_DIR)/$(OPENSSL_DIR)/crypto/perlasm/x86as.pl > $@
-
-$(OPENSSL_SRC)/x86_64/rc4_md5.s:
-	$(VERBOSE)perl $(CONTRIB_DIR)/$(OPENSSL)/crypto/rc4/asm/rc4-md5-x86_64.pl \
-		$(CONTRIB_DIR)/$(OPENSSL_DIR)/crypto/perlasm/x86as.pl > $@
-
+	$(VERBOSE)patch -d $(CONTRIB_DIR)/$(OPENSSL) -p1 -i ../../src/lib/openssl/openssl_conf.patch
+	$(VERBOSE)patch -d $(CONTRIB_DIR)/$(OPENSSL) -p1 -i ../../src/lib/openssl/openssl_rand.patch
 
 #
 # Install openssl headers
 #
 include/openssl:
+	$(VERBOSE)rm -rf $@
 	$(VERBOSE)mkdir -p $@
+	$(VERBOSE)cp src/lib/openssl/opensslconf.h $(CONTRIB_DIR)/$(OPENSSL)/crypto
 	$(VERBOSE)for i in `find $(CONTRIB_DIR)/$(OPENSSL)/include -name *.h`; do \
 		ln -fs ../../$$i include/openssl/; done
-	$(VERBOSE)rm include/openssl/opensslconf.h
 	$(VERBOSE)ln -fs ../../$(CONTRIB_DIR)/$(OPENSSL)/e_os.h include/openssl/
-	$(VERBOSE)ln -fs ../../$(CONTRIB_DIR)/$(OPENSSL)/crypto/md2/md2.h include/openssl/
-	$(VERBOSE)ln -fs ../../$(CONTRIB_DIR)/$(OPENSSL)/crypto/rc5/rc5.h include/openssl/
-	$(VERBOSE)ln -fs ../../$(CONTRIB_DIR)/$(OPENSSL)/crypto/store/store.h include/openssl/
 
 clean-openssl:
 	$(VERBOSE)rm -rf include/openssl
 	$(VERBOSE)rm -rf $(CONTRIB_DIR)/$(OPENSSL)
-	$(VERBOSE)rm -rf $(OPENSSL_SRC)/x86_32/*.s $(OPENSSL_SRC)/x86_64/*.s

@@ -1,0 +1,30 @@
+diff --git a/src/network/ssl/qsslsocket_openssl_symbols.cpp b/src/network/ssl/qsslsocket_openssl_symbols.cpp
+index d370f12..ae8111d 100644
+--- a/src/network/ssl/qsslsocket_openssl_symbols.cpp
++++ b/src/network/ssl/qsslsocket_openssl_symbols.cpp
+@@ -382,7 +382,24 @@ static QPair<QLibrary*, QLibrary*> loadOpenSsl()
+     pair.first = 0;
+     pair.second = 0;
+ 
+-# if defined(Q_OS_SYMBIAN)
++# if defined(Q_OS_GENODE)
++	QLibrary *libssl = new QLibrary(QLatin1String("/libssl.lib.so"));
++    if (!libssl->load()) {
++        delete libssl;
++        return pair;
++    }
++
++    QLibrary *libcrypto = new QLibrary(QLatin1String("/libcrypto.lib.so"));
++    if (!libcrypto->load()) {
++        delete libcrypto;
++        delete libssl;
++        return pair;
++    }
++
++    pair.first = libssl;
++    pair.second = libcrypto;
++    return pair;
++# elif defined(Q_OS_SYMBIAN)
+      QLibrary *libssl = new QLibrary(QLatin1String("libssl"));
+     if (!libssl->load()) {
+         // Cannot find ssleay32.dll

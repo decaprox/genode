@@ -1,0 +1,24 @@
+diff --git a/e_os.h b/e_os.h
+index 79c1392..f1eed18 100644
+--- a/e_os.h
++++ b/e_os.h
+@@ -76,6 +76,11 @@ extern "C" {
+ #define REF_PRINT(a,b)	fprintf(stderr,"%08X:%4d:%s\n",(int)b,b->references,a)
+ #endif
+ 
++#if defined(OPENSSL_SYS_GENODE)
++#  define GETPID_IS_MEANINGLESS
++#  define NO_SYSLOG
++#  define NO_CHMOD
++#else
+ #ifndef DEVRANDOM
+ /* set this to a comma-separated list of 'random' device files to try out.
+  * My default, we will try to read at least one of these files */
+@@ -87,6 +92,7 @@ extern "C" {
+  * listed in DEVRANDOM did not return enough entropy. */
+ #define DEVRANDOM_EGD "/var/run/egd-pool","/dev/egd-pool","/etc/egd-pool","/etc/entropy"
+ #endif
++#endif
+ 
+ #if defined(OPENSSL_SYS_VXWORKS)
+ #  define NO_SYS_PARAM_H
