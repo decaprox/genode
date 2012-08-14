@@ -30,7 +30,9 @@ QT4_INC_DIR := $(QT4_REP_DIR)/src/lib/qt4/mkspecs/qws/genode-x86-g++ \
                $(QT4_REP_DIR)/include/qt4/QtWebKit \
                $(QT4_REP_DIR)/contrib/$(QT4)/include/QtWebKit \
                $(QT4_REP_DIR)/include/qt4/QtXml \
-               $(QT4_REP_DIR)/contrib/$(QT4)/include/QtXml
+               $(QT4_REP_DIR)/contrib/$(QT4)/include/QtXml \
+               $(QT4_REP_DIR)/include/qt4/QtSql \
+               $(QT4_REP_DIR)/contrib/$(QT4)/include/QtSql
 
 INC_DIR += $(QT4_INC_DIR)
 
