@@ -21,9 +21,12 @@
 #ifndef _INCLUDE__SIGNAL_SESSION__SOURCE_CLIENT_H_
 #define _INCLUDE__SIGNAL_SESSION__SOURCE_CLIENT_H_
 
-#include <nova/syscalls.h>
 #include <base/rpc_client.h>
 #include <signal_session/nova_source.h>
+
+/* NOVA includes */
+#include <nova/syscalls.h>
+#include <nova/util.h>
 
 namespace Genode {
 
@@ -32,7 +35,7 @@ namespace Genode {
 		private:
 
 			/**
-			 * Capability with 'pt_sel' referring to a NOVA semaphore
+			 * Capability referring to a NOVA semaphore
 			 */
 			Native_capability _sem;
 
@@ -54,7 +57,8 @@ namespace Genode {
 			 * Constructor
 			 */
 			Signal_source_client(Signal_source_capability cap)
-			: Rpc_client<Nova_signal_source>(static_cap_cast<Nova_signal_source>(cap)) { }
+			: Rpc_client<Nova_signal_source>(
+				static_cap_cast<Nova_signal_source>(cap)) { }
 
 
 			/*****************************
@@ -63,11 +67,19 @@ namespace Genode {
 
 			Signal wait_for_signal()
 			{
-				/* make sure that we have aquired the semaphore from the server */
+				/*
+				 * Make sure that we have acquired the
+				 * semaphore from the server
+				 */
 				_init_sem();
 
-				/* block on semaphore, will be unblocked if signal is available */
-				Nova::sm_ctrl(_sem.dst(), Nova::SEMAPHORE_DOWN);
+				/* 
+				 * Block on semaphore, will be unblocked if
+				 * signal is available
+				 */
+				if (Nova::sm_ctrl(_sem.local_name(),
+				                  Nova::SEMAPHORE_DOWN))
+					nova_die();
 
 				/*
 				 * Now that the server has unblocked the semaphore, we are sure

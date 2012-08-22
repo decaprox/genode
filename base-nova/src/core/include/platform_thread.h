@@ -1,6 +1,7 @@
 /*
  * \brief  Thread facility
  * \author Norman Feske
+ * \author Alexander Boettcher
  * \date   2009-10-02
  */
 
@@ -30,18 +31,25 @@ namespace Genode {
 
 			Platform_pd  *_pd;
 			Pager_object *_pager;
+			addr_t        _id_base;
+			addr_t        _sel_exc_base;
+			unsigned      _cpu_no;
 			bool          _is_main_thread;
-			int           _id;
+
+			addr_t _sel_ec()       { return _id_base; }
+			addr_t _sel_sc()       { return _id_base + 1; }
 
 		public:
 
-			enum { THREAD_INVALID = -1 };   /* invalid thread number */
+			/* invalid thread number */
+			enum { THREAD_INVALID = -1 };
 
 			/**
 			 * Constructor
 			 */
-			Platform_thread(const char *name = 0, unsigned priority = 0,
-			                addr_t utcb = 0, int thread_id = THREAD_INVALID);
+			Platform_thread(const char *name = 0,
+			                unsigned priority = 0,
+			                int thread_id = THREAD_INVALID);
 
 			/**
 			 * Destructor
@@ -51,14 +59,18 @@ namespace Genode {
 			/**
 			 * Start thread
 			 *
-			 * \param ip      instruction pointer to start at
-			 * \param sp      stack pointer to use
-			 * \param cpu_no  target cpu
+			 * \param ip       instruction pointer to start at
+			 * \param sp       stack pointer to use
+			 * \param exc_base exception base of thread in caller
+			 *                 protection domain
+			 * \param vcpu     If true it will run as vCPU,
+			 *                 otherwise it will be a thread.
 			 *
 			 * \retval  0  successful
-			 * \retval -1  thread could not be started
+			 * \retval -1  thread/vCPU could not be started
 			 */
-			int start(void *ip, void *sp, unsigned int cpu_no = 0);
+			int start(void *ip, void *sp, addr_t exc_base = ~0UL,
+			          bool vcpu = false);
 
 			/**
 			 * Pause this thread
@@ -95,6 +107,9 @@ namespace Genode {
 			 */
 			void pager(Pager_object *pager) { _pager = pager; }
 
+			/**
+			 * Return pager object
+			 */
 			Pager_object *pager() { return _pager; }
 
 			/**
@@ -119,6 +134,28 @@ namespace Genode {
 			{
 				_pd = pd, _is_main_thread = is_main_thread;
 			}
+
+			/**
+			 * Return native EC cap with specific rights mask set.
+			 * If the cap is mapped the kernel will demote the
+			 * rights of the EC as specified by the rights mask.
+			 *
+			 * The cap is supposed to be returned to clients,
+			 * which they have to use as argument to identify
+			 * the thread to which they want attach portals.
+			 *
+			 * The demotion by the kernel during the map operation
+			 * takes care that the EC cap itself contains
+			 * no usable rights for the clients.
+			 */
+			Native_capability native_cap()
+			{
+				using namespace Nova;
+
+				return Native_capability(
+					_sel_ec(), Obj_crd::RIGHT_EC_RECALL);
+			}
+
 	};
 }
 

@@ -356,6 +356,25 @@ class Plugin : public Libc::Plugin
 			return -1;
 		}
 
+		int ftruncate(Libc::File_descriptor *fd, ::off_t length)
+		{
+			File_system::Node_handle node_handle = context(fd)->node_handle();
+			File_system::File_handle &file_handle =
+			    static_cast<File_system::File_handle&>(node_handle);
+
+			try {
+				file_system()->truncate(file_handle, length);
+			} catch (File_system::Invalid_handle) {
+				errno = EINVAL;
+				return -1;
+			} catch (File_system::Permission_denied) {
+				errno = EPERM;
+				return -1;
+			}
+
+			return 0;
+		}
+
 		/*
 		 * *basep does not get initialized by the libc and is therefore
 		 * useless for determining a specific directory index. This
@@ -499,22 +518,42 @@ class Plugin : public Libc::Plugin
 				 * Open directory that contains the file to be opened/created
 				 */
 				File_system::Dir_handle const dir_handle =
-				file_system()->dir(dir_path, false);
+				    file_system()->dir(dir_path, false);
 
 				Node_handle_guard guard(dir_handle);
+
+				File_system::File_handle handle;
 
 				/*
 				 * Open or create file
 				 */
 				bool const create = (flags & O_CREAT) != 0;
-				File_system::File_handle const handle =
-					file_system()->file(dir_handle, basename, mode, create);
+
+				bool opened = false;
+				while (!opened) {
+					try {
+						handle = file_system()->file(dir_handle, basename, mode, create);
+						opened = true;
+					} catch (File_system::Node_already_exists) {
+						if (flags & O_EXCL)
+							throw File_system::Node_already_exists();
+						/* try to open the existing file */
+						try {
+							handle = file_system()->file(dir_handle, basename, mode, false);
+							opened = true;
+						} catch (File_system::Lookup_failed) {
+							/* the file got deleted in the meantime */
+						}
+					}
+				}
 
 				Plugin_context *context = new (Genode::env()->heap())
 					Plugin_context(handle);
 
-				return Libc::file_descriptor_allocator()->alloc(this, context);
-
+				Libc::File_descriptor *fd = Libc::file_descriptor_allocator()->alloc(this, context);
+				if ((flags & O_TRUNC) && (ftruncate(fd, 0) == -1))
+					return 0;
+				return fd;
 			}
 			catch (File_system::Lookup_failed) {
 				PERR("open(%s) lookup failed", pathname); }

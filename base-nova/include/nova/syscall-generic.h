@@ -2,6 +2,7 @@
  * \brief  Syscall bindings for the NOVA microhypervisor
  * \author Norman Feske
  * \author Sebastian Sumpf
+ * \author Alexander Boettcher
  * \date   2009-12-27
  */
 
@@ -44,7 +45,7 @@ namespace Nova {
 	};
 
 	/**
-	 * NOVA sytem-call IDs
+	 * NOVA system-call IDs
 	 */
 	enum Syscall {
 		NOVA_CALL       = 0x0,
@@ -63,6 +64,21 @@ namespace Nova {
 		NOVA_ASSIGN_GSI = 0xd,
 	};
 
+	/**
+	 * NOVA status codes returned by system-calls
+	 */
+        enum Status
+        {
+            NOVA_OK             = 0,
+            NOVA_IPC_TIMEOUT    = 1,
+            NOVA_IPC_ABORT      = 2,
+            NOVA_INV_HYPERCALL  = 3,
+            NOVA_INV_SELECTOR   = 4,
+            NOVA_INV_PARAMETER  = 5,
+            NOVA_INV_FEATURE    = 6,
+            NOVA_INV_CPU_NUMBER = 7,
+            NOVA_INVD_DEVICE_ID = 8,
+        };
 
 	/**
 	 * Hypervisor information page
@@ -184,9 +200,10 @@ namespace Nova {
 			 */
 			enum {
 				TYPE_MASK   = 0x3,  TYPE_SHIFT  =  0,
-				BASE_SHIFT  = 12,   RIGHTS_MASK = 0x7c,
+				BASE_SHIFT  = 12,   RIGHTS_MASK = 0x1f,
 				ORDER_MASK  = 0x1f, ORDER_SHIFT =  7,
-				BASE_MASK   = (~0UL) >> BASE_SHIFT
+				BASE_MASK   = (~0UL) >> BASE_SHIFT,
+				RIGHTS_SHIFT= 2
 			};
 
 			/**
@@ -197,9 +214,7 @@ namespace Nova {
 				MEM_CRD_TYPE    = 1,
 				IO_CRD_TYPE     = 2,
 				OBJ_CRD_TYPE    = 3,
-				RIGHTS_ALL      = 0x7c,
-				IO_CRD_ALL      = IO_CRD_TYPE | RIGHTS_ALL,
-				OBJ_CRD_ALL     = OBJ_CRD_TYPE | RIGHTS_ALL,
+				RIGHTS_ALL      = 0x1f,
 			};
 
 			void _base(mword_t base)
@@ -228,6 +243,7 @@ namespace Nova {
 			mword_t order() const { return _query<ORDER_MASK, ORDER_SHIFT>(); }
 			bool is_null()  const { return (_value & TYPE_MASK) == NULL_CRD_TYPE; }
 			uint8_t type()  const { return _query<TYPE_MASK, TYPE_SHIFT>(); }
+			uint8_t rights() const { return _query<RIGHTS_MASK, RIGHTS_SHIFT>(); }
 	} __attribute__((packed));
 
 
@@ -299,7 +315,8 @@ namespace Nova {
 			Io_crd(mword_t base, mword_t order)
 			: Crd(base, order)
 			{
-				_assign<TYPE_MASK | RIGHTS_MASK, TYPE_SHIFT>(IO_CRD_ALL);
+				_assign<TYPE_MASK, TYPE_SHIFT>(IO_CRD_TYPE);
+				_assign<RIGHTS_MASK, RIGHTS_SHIFT>(RIGHTS_ALL);
 			}
 	};
 
@@ -308,10 +325,21 @@ namespace Nova {
 	{
 		public:
 
-			Obj_crd(mword_t base, mword_t order)
+			enum {
+				RIGHT_EC_RECALL = 0x1U,
+			};
+
+			Obj_crd() : Crd(0, 0)
+			{
+				_assign<TYPE_MASK, TYPE_SHIFT>(NULL_CRD_TYPE);
+			}
+	
+			Obj_crd(mword_t base, mword_t order,
+			        mword_t rights = RIGHTS_ALL)
 			: Crd(base, order)
 			{
-				_assign<TYPE_MASK | RIGHTS_MASK, TYPE_SHIFT>(OBJ_CRD_ALL);
+				_assign<TYPE_MASK, TYPE_SHIFT>(OBJ_CRD_TYPE);
+				_assign<RIGHTS_MASK, RIGHTS_SHIFT>(rights);
 			}
 	};
 
@@ -392,6 +420,7 @@ namespace Nova {
 		struct Item {
 			mword_t crd;
 			mword_t hotspot;
+			bool is_del() { return hotspot & 0x1; }
 		};
 
 		/**
@@ -415,7 +444,8 @@ namespace Nova {
 		__attribute__((warn_unused_result))
 		bool append_item(Crd crd, mword_t sel_hotspot,
 		                 bool kern_pd = false,
-		                 bool update_guest_pt = false)
+		                 bool update_guest_pt = false,
+		                 bool translate_map = false)
 		{
 			/* transfer items start at the end of the UTCB */
 			items += 1 << 16;
@@ -433,10 +463,22 @@ namespace Nova {
 			/* update guest page table */
 			unsigned g = update_guest_pt ? (1 << 10) : 0;
 
-			item->hotspot = crd.hotspot(sel_hotspot) | g | h | 1;
+			item->hotspot = crd.hotspot(sel_hotspot) | g | h | (translate_map ? 2 : 1);
 			item->crd = crd.value();
 
 			return true;
+		}
+
+		/**
+		 * Return typed item at postion i in UTCB
+		 *
+		 * \param i position of item requested, starts with 0
+		 */
+		Item * get_item(const unsigned i) {
+			if (i > (PAGE_SIZE_BYTE / sizeof(struct Item))) return 0;
+			Item * item = reinterpret_cast<Item *>(this) + (PAGE_SIZE_BYTE / sizeof(struct Item)) - i - 1;
+			if (reinterpret_cast<mword_t *>(item) < this->msg) return 0;
+			return item;
 		}
 
 		mword_t mtd_value() const { return static_cast<Mtd>(mtd).value(); }
@@ -458,6 +500,9 @@ namespace Nova {
 		PT_SEL_PARENT     = 0x1a,  /* convention on Genode */
 		PT_SEL_STARTUP    = 0x1e,
 		PD_SEL            = 0x1b,
+		PD_SEL_CAP_LOCK   = 0x1c,  /* convention on Genode */
+		SM_SEL_EC_MAIN    = 0x1c,  /* convention on Genode */
+		SM_SEL_EC         = 0x1d,  /* convention on Genode */
 	};
 
 }

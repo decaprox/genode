@@ -552,6 +552,7 @@ namespace {
 			int fstat(Libc::File_descriptor *, struct stat *);
 			int fsync(Libc::File_descriptor *);
 			int fstatfs(Libc::File_descriptor *, struct statfs *);
+			int ftruncate(Libc::File_descriptor *, ::off_t);
 			int fcntl(Libc::File_descriptor *, int, long);
 			ssize_t getdirentries(Libc::File_descriptor *, char *, ::size_t, ::off_t *);
 			::off_t lseek(Libc::File_descriptor *, ::off_t offset, int whence);
@@ -607,23 +608,45 @@ namespace {
 			return 0;
 		}
 
-		if (flags & O_CREAT)
-			unlink(pathname);
-
-		Genode::strncpy(sysio()->open_in.path, pathname, sizeof(sysio()->open_in.path));
-		sysio()->open_in.mode = flags;
-
-		if (!noux()->syscall(Noux::Session::SYSCALL_OPEN)) {
-			/*
-			 * XXX  we should return meaningful errno values
-			 */
-			PDBG("ENOENT (sysio()->error.open=%d)", sysio()->error.open);
-			errno = ENOENT;
-			return 0;
+		bool opened = false;
+		while (!opened) {
+			Genode::strncpy(sysio()->open_in.path, pathname, sizeof(sysio()->open_in.path));
+			sysio()->open_in.mode = flags;
+			if (noux()->syscall(Noux::Session::SYSCALL_OPEN))
+				opened = true;
+			else
+				switch (sysio()->error.open) {
+					case Noux::Sysio::OPEN_ERR_UNACCESSIBLE:
+						if (!(flags & O_CREAT)) {
+							errno = ENOENT;
+							return 0;
+						}
+						/* O_CREAT is set, so try to create the file */
+						Genode::strncpy(sysio()->open_in.path, pathname, sizeof(sysio()->open_in.path));
+						sysio()->open_in.mode = flags | O_EXCL;
+						if (noux()->syscall(Noux::Session::SYSCALL_OPEN))
+							opened = true;
+						else
+							switch (sysio()->error.open) {
+								case Noux::Sysio::OPEN_ERR_EXISTS:
+									/* file has been created by someone else in the meantime */
+									break;
+								case Noux::Sysio::OPEN_ERR_NO_PERM: errno = EPERM;  return 0;
+								default:                            errno = ENOENT; return 0;
+							}
+						break;
+					case Noux::Sysio::OPEN_ERR_NO_PERM: errno = EPERM;  return 0;
+					case Noux::Sysio::OPEN_ERR_EXISTS:  errno = EEXIST; return 0;
+					default:                            errno = ENOENT; return 0;
+				}
 		}
 
 		Libc::Plugin_context *context = noux_context(sysio()->open_out.fd);
-		return Libc::file_descriptor_allocator()->alloc(this, context, sysio()->open_out.fd);
+		Libc::File_descriptor *fd =
+		    Libc::file_descriptor_allocator()->alloc(this, context, sysio()->open_out.fd);
+		if ((flags & O_TRUNC) && (ftruncate(fd, 0) == -1))
+			return 0;
+		return fd;
 	}
 
 
@@ -833,6 +856,21 @@ namespace {
 	{
 		if (verbose)
 			PDBG("not implemented");
+		return 0;
+	}
+
+
+	int Plugin::ftruncate(Libc::File_descriptor *fd, ::off_t length)
+	{
+		sysio()->ftruncate_in.fd = noux_fd(fd->context);
+		sysio()->ftruncate_in.length = length;
+		if (!noux()->syscall(Noux::Session::SYSCALL_FTRUNCATE)) {
+			switch (sysio()->error.ftruncate) {
+				case Noux::Sysio::FTRUNCATE_ERR_NO_PERM: errno = EPERM; break;
+			}
+			return -1;
+		}
+
 		return 0;
 	}
 
@@ -1318,7 +1356,7 @@ namespace {
 	{
 		Genode::size_t sum_recv_count = 0;
 
-		while (len) {
+		while (len > 0) {
 			Genode::size_t curr_len =
 				Genode::min(len, sizeof(sysio()->recv_in.buf));
 
@@ -1330,11 +1368,12 @@ namespace {
 				return -1;
 			}
 
-			Genode::memcpy(buf, sysio()->recv_in.buf, sysio()->recv_out.len);
+			Genode::memcpy((char *)buf + sum_recv_count,
+			               sysio()->recv_in.buf, sysio()->recv_out.len);
 
 			sum_recv_count += sysio()->recv_out.len;
 
-			if (sysio()->recv_out.len < sysio()->recv_in.len)
+			if (sysio()->recv_out.len < curr_len)
 				break;
 
 			if (sysio()->recv_out.len <= len)
@@ -1352,8 +1391,7 @@ namespace {
 	{
 		Genode::size_t sum_recvfrom_count = 0;
 
-
-		while (len) {
+		while (len > 0) {
 			Genode::size_t curr_len = Genode::min(len, sizeof(sysio()->recvfrom_in.buf));
 
 			sysio()->recv_in.fd = noux_fd(fd->context);
@@ -1374,11 +1412,12 @@ namespace {
 					       sysio()->recvfrom_in.addrlen);
 
 
-			Genode::memcpy(buf, sysio()->recvfrom_in.buf, sysio()->recvfrom_out.len);
+			Genode::memcpy((char *)buf + sum_recvfrom_count,
+			               sysio()->recvfrom_in.buf, sysio()->recvfrom_out.len);
 
 			sum_recvfrom_count += sysio()->recvfrom_out.len;
 
-			if (sysio()->recvfrom_out.len < sysio()->recvfrom_in.len)
+			if (sysio()->recvfrom_out.len < curr_len)
 				break;
 
 			if (sysio()->recvfrom_out.len <= len)

@@ -16,6 +16,12 @@
 
 #include <platform_thread.h>
 
+/*
+ * Must be initialized by the startup code,
+ * only valid in core
+ */
+extern Genode::addr_t __core_pd_sel;
+
 namespace Genode {
 
 	class Platform_thread;
@@ -23,10 +29,9 @@ namespace Genode {
 	{
 		private:
 
-			int               _thread_cnt;
 			Native_capability _parent;
-			int               _id;
-			int               _pd_sel;
+			int               _thread_cnt;
+			addr_t            _pd_sel;
 
 		public:
 
@@ -63,16 +68,27 @@ namespace Genode {
 			/**
 			 * Return portal capability selector for parent interface
 			 */
-			int parent_pt_sel() { return _parent.dst(); }
+			addr_t parent_pt_sel() { return _parent.local_name(); }
 
 			/**
 			 * Assign PD selector to PD
 			 */
-			void assign_pd(int pd_sel) { _pd_sel = pd_sel; }
+			void assign_pd(addr_t pd_sel) { _pd_sel = pd_sel; }
 
-			int pd_sel() { return _pd_sel; }
+			/**
+			 * Capability selector of this task.
+			 *
+			 * \return PD selector
+			 */
+			addr_t pd_sel() { return _pd_sel; }
 
-			int id() { return _id; }
+			/**
+			 * Capability selector of core protection domain
+			 *
+			 * \return PD selector
+			 */
+			static addr_t pd_core_sel() { return __core_pd_sel; }
+
 	};
 }
 

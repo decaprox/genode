@@ -2,9 +2,10 @@
  * \brief  Capability-selector allocator
  * \author Norman Feske
  * \author Sebastian Sumpf
+ * \author Alexander Boettcher
  * \date   2010-01-19
  *
- * This is a NOVA-specific addition to the process enviroment.
+ * This is a NOVA-specific addition to the process environment.
  */
 
 /*
@@ -19,6 +20,7 @@
 
 /* NOVA includes */
 #include <nova/syscalls.h>
+#include <nova/util.h>
 
 using namespace Genode;
 
@@ -29,7 +31,6 @@ using namespace Genode;
  * Must be initialized by the startup code
  */
 int __first_free_cap_selector;
-int __local_pd_sel;
 
 /**
  * Low-level lock to protect the allocator
@@ -41,7 +42,7 @@ class Alloc_lock
 {
 	private:
 
-		int _sm_cap;
+		addr_t _sm_cap;
 
 	public:
 
@@ -50,14 +51,19 @@ class Alloc_lock
 		 *
 		 * \param sm_cap  capability selector for the used semaphore
 		 */
-		Alloc_lock(int sm_cap) : _sm_cap(sm_cap)
+		Alloc_lock() : _sm_cap(Nova::PD_SEL_CAP_LOCK) { }
+
+		void lock()
 		{
-			Nova::create_sm(_sm_cap, __local_pd_sel, 1);
+			if (Nova::sm_ctrl(_sm_cap, Nova::SEMAPHORE_DOWN))
+				nova_die();
 		}
 
-		void lock() { Nova::sm_ctrl(_sm_cap, Nova::SEMAPHORE_DOWN); }
-
-		void unlock() { Nova::sm_ctrl(_sm_cap, Nova::SEMAPHORE_UP); }
+		void unlock()
+		{
+			if (Nova::sm_ctrl(_sm_cap, Nova::SEMAPHORE_UP))
+				nova_die();
+		}
 };
 
 
@@ -66,35 +72,26 @@ class Alloc_lock
  */
 static Alloc_lock *alloc_lock()
 {
-	static Alloc_lock alloc_lock_inst(__first_free_cap_selector);
+	static Alloc_lock alloc_lock_inst;
 	return &alloc_lock_inst;
 }
-
-
-static int _cap_free;
 
 
 addr_t Cap_selector_allocator::alloc(size_t num_caps_log2)
 {
 	alloc_lock()->lock();
-	int num_caps = 1 << num_caps_log2;
-	int ret_base = (_cap_free + num_caps - 1) & ~(num_caps - 1);
-	_cap_free = ret_base + num_caps;
+	addr_t ret_base = Bit_allocator::alloc(num_caps_log2);
 	alloc_lock()->unlock();
 	return ret_base;
 }
 
-
 void Cap_selector_allocator::free(addr_t cap, size_t num_caps_log2)
 {
-	/*
-	 * We don't free capability selectors because revoke is not supported
-	 * on NOVA yet, anyway.
-	 */
+	alloc_lock()->lock();
+	Bit_allocator::free(cap, num_caps_log2);
+	alloc_lock()->unlock();
+
 }
-
-
-unsigned Cap_selector_allocator::pd_sel() { return __local_pd_sel; }
 
 
 Cap_selector_allocator::Cap_selector_allocator()
@@ -103,7 +100,7 @@ Cap_selector_allocator::Cap_selector_allocator()
 	alloc_lock();
 
 	/* the first free selector is used for the lock */
-	_cap_free = __first_free_cap_selector + 1;
+	Bit_allocator::_reserve(0, __first_free_cap_selector + 1);
 }
 
 

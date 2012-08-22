@@ -44,8 +44,7 @@ namespace Genode {
 			 */
 			Signal_context_capability _exception_sigh;
 
-			unsigned _pt_sel;      /* portal selector for object identity */
-			unsigned _pt_cleanup;  /* portal selector for object cleanup/destruction */
+			addr_t _pt_cleanup;  /* portal selector for object cleanup/destruction */
 
 			addr_t _initial_esp;
 			addr_t _initial_eip;
@@ -75,7 +74,12 @@ namespace Genode {
 			/**
 			 * Return base of initial portal window
 			 */
-			unsigned exc_pt_sel() { return _tid.exc_pt_sel; }
+			addr_t ec_sel() { return _tid.ec_sel; }
+
+			/**
+			 * Return base of initial portal window
+			 */
+			addr_t exc_pt_sel() { return _tid.exc_pt_sel; }
 
 			/**
 			 * Set initial stack pointer used by the startup handler
@@ -86,11 +90,6 @@ namespace Genode {
 			 * Set initial instruction pointer used by the startup handler
 			 */
 			void initial_eip(addr_t eip) { _initial_eip = eip; }
-
-			/**
-			 * Return portal capability selector used for object identity
-			 */
-			unsigned pt_sel() { return _pt_sel; }
 
 			/**
 			 * Continue execution of pager object
@@ -106,6 +105,14 @@ namespace Genode {
 
 				Signal_transmitter transmitter(_exception_sigh);
 				transmitter.submit();
+			}
+
+			/**
+			 * Return entry point address
+			 */
+			addr_t handler_address()
+			{
+	                 	return reinterpret_cast<addr_t>(_invoke_handler);
 			}
 	};
 
