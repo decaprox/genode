@@ -30,6 +30,7 @@
 
 /* libc-internal includes */
 #include "libc_mem_alloc.h"
+#include "libc_mmap_registry.h"
 
 using namespace Libc;
 
@@ -41,6 +42,13 @@ using namespace Libc;
 
 
 enum { INVALID_FD = -1 };
+
+
+Libc::Mmap_registry *Libc::mmap_registry()
+{
+	static Libc::Mmap_registry registry;
+	return &registry;
+}
 
 
 /***************
@@ -294,18 +302,50 @@ extern "C" int mkdir(const char *path, mode_t mode) {
 extern "C" void *mmap(void *addr, ::size_t length, int prot, int flags,
                       int libc_fd, ::off_t offset)
 {
+
 	/* handle requests for anonymous memory */
-	if (!addr && libc_fd == -1)
-		return Libc::mem_alloc()->alloc(length, PAGE_SHIFT);
+	if (!addr && libc_fd == -1) {
+		void *start = Libc::mem_alloc()->alloc(length, PAGE_SHIFT);
+		mmap_registry()->insert(start, length, 0);
+		return start;
+	}
 
 	/* lookup plugin responsible for file descriptor */
 	File_descriptor *fd = libc_fd_to_fd(libc_fd, "mmap");
-	if (!fd || !fd->plugin) {
+	if (!fd || !fd->plugin || !fd->plugin->supports_mmap()) {
 		PWRN("mmap not supported for file descriptor %d", libc_fd);
 		return (void *)INVALID_FD;
 	}
 
-	return fd->plugin->mmap(addr, length, prot, flags, fd, offset);
+	void *start = fd->plugin->mmap(addr, length, prot, flags, fd, offset);
+	mmap_registry()->insert(start, length, fd->plugin);
+	return start;
+}
+
+
+extern "C" int munmap(void *start, ::size_t length)
+{
+	if (!mmap_registry()->is_registered(start)) {
+		PWRN("munmap: could not lookup plugin for address %p", start);
+		errno = EINVAL;
+		return -1;
+	}
+
+	/*
+	 * Lookup plugin that was used for mmap
+	 *
+	 * If the pointer is NULL, 'start' refers to an anonymous mmap.
+	 */
+	Plugin *plugin = mmap_registry()->lookup_plugin_by_addr(start);
+
+	int ret = 0;
+	if (plugin)
+		ret = plugin->munmap(start, length);
+	else
+		Libc::mem_alloc()->free(start);
+
+	mmap_registry()->remove(start);
+	return ret;
 }
 
 

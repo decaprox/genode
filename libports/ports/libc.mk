@@ -182,7 +182,9 @@ LIBC_IMPORT_INCLUDES += include/libc/vm/vm_param.h \
 #
 # Files coming from the sys/net directories
 #
-LIBC_IMPORT_INCLUDES += include/libc/net/if.h
+LIBC_IMPORT_INCLUDES += include/libc/net/if.h \
+                        include/libc/net/if_dl.h \
+                        include/libc/net/if_types.h
 
 #
 # Files coming from the sys/netinet and sys/netinet6 directories
@@ -495,9 +497,6 @@ libc_gen_symlink_subsubsubsub = $(VERBOSE)mkdir -p $(dir $@); ln -sf ../../../..
 include/libc/arpa/%.h: $(CONTRIB_DIR)/$(LIBC)/include/arpa/%.h
 	$(libc_gen_symlink_subsubsub)
 
-include/libc/%.h: $(CONTRIB_DIR)/$(LIBC)/include/%.h
-	$(libc_gen_symlink_subsub)
-
 include/libc/gssapi/%.h: $(CONTRIB_DIR)/$(LIBC)/include/gssapi/%.h
 	$(libc_gen_symlink_subsubsub)
 
@@ -515,6 +514,9 @@ include/libc/rpc/%.h: $(CONTRIB_DIR)/$(LIBC)/include/rpc/%.h
 
 include/libc/rpcsvc/%.h: $(CONTRIB_DIR)/$(LIBC)/include/rpcsvc/%.h
 	$(libc_gen_symlink_subsubsub)
+
+include/libc/%.h: $(CONTRIB_DIR)/$(LIBC)/include/%.h
+	$(libc_gen_symlink_subsub)
 
 include/libc/%.h: $(CONTRIB_DIR)/$(LIBC)/sys_sys/%.h
 	$(libc_gen_symlink_subsub)
@@ -581,7 +583,7 @@ apply_patches-libc: checkout-libc
 # as side effect of the 'LIBC_DIRS_TO_CHECKOUT' out rule).
 #
 create_include_symlinks-libc: checkout-libc
-	$(VERBOSE)make -s $(LIBC_IMPORT_INCLUDES)
+	$(VERBOSE)make $(LIBC_IMPORT_INCLUDES) VERBOSE=$(VERBOSE)
 
 prepare-libc: apply_patches-libc libc_net_generate libc_rpc_generate create_include_symlinks-libc
 

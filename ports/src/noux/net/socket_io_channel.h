@@ -27,6 +27,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <fcntl.h>
 
 
 namespace Noux {
@@ -82,25 +83,15 @@ namespace Noux {
 
 			bool fcntl(Sysio *sysio)
 			{
-				/*
-				 * For now this fcntl() only contains stubs to keep programs
-				 * happy. lwip-1.3.2 which is currently used does not provide
-				 * its own lwip_fcntl(). We could only use lwip_ioctl() to set
-				 * the socket O_NONBLOCKING if we get this kind of request.
-				 */
 				switch (sysio->fcntl_in.cmd) {
 
 				case Sysio::FCNTL_CMD_GET_FILE_STATUS_FLAGS:
-				{
-					PWRN("FCNTL_CMD_GET_FILE_STATUS_FLAGS currently only returns 0");
-					sysio->fcntl_out.result = 0;
-					return true;
-				}
-
 				case Sysio::FCNTL_CMD_SET_FILE_STATUS_FLAGS:
 				{
-					PWRN("FCNTL_CMD_SET_FILE_STATUS_FLAGS currently only returns 0");
-					sysio->fcntl_out.result = 0;
+					int result = ::fcntl(_socket, sysio->fcntl_in.cmd,
+					                     sysio->fcntl_in.long_arg);
+
+					sysio->fcntl_out.result = result;
 					return true;
 				}
 				default:
@@ -126,12 +117,19 @@ namespace Noux {
 				return false;
 			}
 
-			size_t write(Sysio *sysio)
+			bool write(Sysio *sysio, size_t &count)
 			{
-				size_t written = ::write(_socket, sysio->write_in.chunk,
+				size_t result = ::write(_socket, sysio->write_in.chunk,
 				                         sysio->write_in.count);
 
-				return written;
+				if (result > -1) {
+					sysio->write_out.count = result;
+					count = result;
+
+					return true;
+				}
+
+				return false;
 			}
 
 			bool read(Sysio *sysio)

@@ -34,9 +34,14 @@
 #include <sys/dirent.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #include <termios.h>
+#include <pwd.h>
+#include <string.h>
 
+/* libc-internal includes */
+#include <libc_mem_alloc.h>
 
 enum { verbose = false };
 
@@ -89,6 +94,87 @@ enum { FS_BLOCK_SIZE = 1024 };
 /***********************************************
  ** Overrides of libc default implementations **
  ***********************************************/
+
+/**
+ * User information related functions
+ */
+extern "C" struct passwd *getpwuid(uid_t uid)
+{
+	static char name[Noux::Sysio::MAX_USERNAME_LEN];
+	static char shell[Noux::Sysio::MAX_SHELL_LEN];
+	static char home[Noux::Sysio::MAX_HOME_LEN];
+
+	static char *empty = strdup("");
+
+	static struct passwd pw = {
+		/* .pw_name    = */ name,
+		/* .pw_passwd  = */ empty,
+		/* .pw_uid     = */ 0,
+		/* .pw_gid     = */ 0,
+		/* .pw_change  = */ 0,
+		/* .pw_class   = */ empty,
+		/* .pw_gecos   = */ empty,
+		/* .pw_dir     = */ home,
+		/* .pw_shell   = */ shell,
+		/* .pw_expire  = */ 0,
+		/* .pw_fields  = */ 0
+	};
+
+	sysio()->userinfo_in.uid = uid;
+	sysio()->userinfo_in.request = Noux::Sysio::USERINFO_GET_ALL;
+
+	if (!noux()->syscall(Noux::Session::SYSCALL_USERINFO)) {
+		return (struct passwd *)0;
+	}
+
+	/* SYSCALL_USERINFO assures that strings are always '\0' terminated */
+	Genode::memcpy(name,  sysio()->userinfo_out.name,  sizeof (sysio()->userinfo_out.name));
+	Genode::memcpy(home,  sysio()->userinfo_out.home,  sizeof (sysio()->userinfo_out.home));
+	Genode::memcpy(shell, sysio()->userinfo_out.shell, sizeof (sysio()->userinfo_out.shell));
+
+	pw.pw_uid = sysio()->userinfo_out.uid;
+	pw.pw_gid = sysio()->userinfo_out.gid;
+
+	return &pw;
+}
+
+
+extern "C" uid_t getgid()
+{
+	sysio()->userinfo_in.request = Noux::Sysio::USERINFO_GET_GID;
+
+	if (!noux()->syscall(Noux::Session::SYSCALL_USERINFO))
+		return 0;
+
+	uid_t gid = sysio()->userinfo_out.gid;
+	return gid;
+}
+
+
+extern "C" uid_t getegid()
+{
+	return getgid();
+}
+
+
+extern "C" uid_t getuid()
+{
+	sysio()->userinfo_in.request = Noux::Sysio::USERINFO_GET_UID;
+
+	if (!noux()->syscall(Noux::Session::SYSCALL_USERINFO))
+		return 0;
+
+	uid_t uid = sysio()->userinfo_out.uid;
+	PDBG("getuid(): %d", uid);
+	return uid;
+}
+
+
+extern "C" uid_t geteuid()
+{
+	return getuid();
+}
+
 
 extern "C" int __getcwd(char *dst, Genode::size_t dst_size)
 {
@@ -268,17 +354,31 @@ extern "C" int select(int nfds, fd_set *readfds, fd_set *writefds,
 	int   *dst     = in_fds.array;
 	size_t dst_len = Noux::Sysio::Select_fds::MAX_FDS;
 
-	in_fds.num_rd = marshal_fds(readfds, nfds, dst, dst_len);
+	/**
+	 * These variables are used in max_fds_exceeded() calculation, so
+	 * they need to be proper initialized.
+	 */
+	in_fds.num_rd = 0;
+	in_fds.num_wr = 0;
+	in_fds.num_ex = 0;
 
-	dst     += in_fds.num_rd;
-	dst_len -= in_fds.num_rd;
+	if (readfds != NULL) {
+		in_fds.num_rd = marshal_fds(readfds, nfds, dst, dst_len);
 
-	in_fds.num_wr = marshal_fds(writefds, nfds, dst, dst_len);
+		dst     += in_fds.num_rd;
+		dst_len -= in_fds.num_rd;
+	}
 
-	dst     += in_fds.num_wr;
-	dst_len -= in_fds.num_wr;
+	if (writefds != NULL) {
+		in_fds.num_wr = marshal_fds(writefds, nfds, dst, dst_len);
 
-	in_fds.num_ex = marshal_fds(exceptfds, nfds, dst, dst_len);
+		dst     += in_fds.num_wr;
+		dst_len -= in_fds.num_wr;
+	}
+
+	if (exceptfds != NULL) {
+		in_fds.num_ex = marshal_fds(exceptfds, nfds, dst, dst_len);
+	}
 
 	if (in_fds.max_fds_exceeded()) {
 		errno = ENOMEM;
@@ -291,14 +391,6 @@ extern "C" int select(int nfds, fd_set *readfds, fd_set *writefds,
 	if (timeout) {
 		sysio()->select_in.timeout.sec  = timeout->tv_sec;
 		sysio()->select_in.timeout.usec = timeout->tv_usec;
-
-		if (!sysio()->select_in.timeout.zero()) {
-//			PDBG("timeout=%d,%d -> replaced by zero timeout",
-//			     (int)timeout->tv_sec, (int)timeout->tv_usec);
-
-			sysio()->select_in.timeout.sec  = 0;
-			sysio()->select_in.timeout.usec = 0;
-		}
 	} else {
 		sysio()->select_in.timeout.set_infinite();
 	}
@@ -320,17 +412,28 @@ extern "C" int select(int nfds, fd_set *readfds, fd_set *writefds,
 	Noux::Sysio::Select_fds &out_fds = sysio()->select_out.fds;
 
 	int *src = out_fds.array;
+	int total_fds = 0;
 
-	unmarshal_fds(src, out_fds.num_rd, readfds);
-	src += out_fds.num_rd;
+	if (readfds != NULL) {
+		unmarshal_fds(src, out_fds.num_rd, readfds);
+		src += out_fds.num_rd;
+		total_fds += out_fds.num_rd;
+	}
 
-	unmarshal_fds(src, out_fds.num_wr, writefds);
-	src += out_fds.num_wr;
+	if (writefds != NULL) {
+		unmarshal_fds(src, out_fds.num_wr, writefds);
+		src += out_fds.num_wr;
+		total_fds += out_fds.num_wr;
+	}
 
-	unmarshal_fds(src, out_fds.num_ex, exceptfds);
+	if (exceptfds != NULL) {
+		unmarshal_fds(src, out_fds.num_ex, exceptfds);
+		/* exceptfds are currently ignored */
+	}
 
-	return out_fds.total_fds();
+	return total_fds;
 }
+
 
 #include <setjmp.h>
 #include <base/platform_env.h>
@@ -541,9 +644,7 @@ namespace {
 			bool supports_rename(const char *, const char *) { return true; }
 			bool supports_mkdir(const char *, mode_t)        { return true; }
 			bool supports_socket(int, int, int)              { return true; }
-			bool supports_freeaddrinfo(struct addrinfo *)    { return true; }
-			bool supports_getaddrinfo(const char *, const char *,
-						  struct addrinfo **)    { return true; }
+			bool supports_mmap()                             { return true; }
 
 			Libc::File_descriptor *open(char const *, int);
 			ssize_t write(Libc::File_descriptor *, const void *, ::size_t);
@@ -564,6 +665,9 @@ namespace {
 			int unlink(char const *path);
 			int rename(const char *oldpath, const char *newpath);
 			int mkdir(const char *path, mode_t mode);
+			void *mmap(void *addr, ::size_t length, int prot, int flags,
+			           Libc::File_descriptor *, ::off_t offset);
+			int munmap(void *addr, ::size_t length);
 
 			/* Network related functions */
 			Libc::File_descriptor *socket(int, int, int);
@@ -573,9 +677,6 @@ namespace {
 				 socklen_t);
 			int connect(Libc::File_descriptor *, const struct sockaddr *addr,
 				    socklen_t addrlen);
-			void freeaddrinfo(struct addrinfo *);
-			int getaddrinfo(const char *, const char *, const struct addrinfo *,
-					struct addrinfo **);
 			int getpeername(Libc::File_descriptor *, struct sockaddr *,
 					socklen_t *);
 			int listen(Libc::File_descriptor *, int);
@@ -763,9 +864,18 @@ namespace {
 
 			break;
 
+		case FIONBIO:
+			{
+				if (verbose)
+					PDBG("FIONBIO - *argp=%d", *argp);
+
+				sysio()->ioctl_in.request = Noux::Sysio::Ioctl_in::OP_FIONBIO;
+				sysio()->ioctl_in.argp = argp ? *(int*)argp : 0;
+			}
+
 		default:
 
-			PWRN("unsupported ioctl (request=0x%x", request);
+			PWRN("unsupported ioctl (request=0x%x)", request);
 			break;
 		}
 
@@ -793,6 +903,9 @@ namespace {
 				winsize->ws_col = sysio()->ioctl_out.tiocgwinsz.columns;
 				return 0;
 			}
+
+		case FIONBIO:
+			return 0;
 
 		default:
 			return -1;
@@ -922,6 +1035,12 @@ namespace {
 		case F_GETFL:
 			PINF("fcntl: F_GETFL for libc_fd=%d", fd->libc_fd);
 			sysio()->fcntl_in.cmd = Noux::Sysio::FCNTL_CMD_GET_FILE_STATUS_FLAGS;
+			break;
+
+		case F_SETFL:
+			PINF("fcntl: F_SETFL for libc_fd=%d", fd->libc_fd);
+			sysio()->fcntl_in.cmd      = Noux::Sysio::FCNTL_CMD_SET_FILE_STATUS_FLAGS;
+			sysio()->fcntl_in.long_arg = arg;
 			break;
 
 		default:
@@ -1089,6 +1208,42 @@ namespace {
 		return 0;
 	}
 
+	void *Plugin::mmap(void *addr_in, ::size_t length, int prot, int flags,
+	                   Libc::File_descriptor *fd, ::off_t offset)
+	{
+		if (prot != PROT_READ) {
+			PERR("mmap for prot=%x not supported", prot);
+			errno = EACCES;
+			return (void *)-1;
+		}
+
+		if (addr_in != 0) {
+			PERR("mmap for predefined address not supported");
+			errno = EINVAL;
+			return (void *)-1;
+		}
+
+		void *addr = Libc::mem_alloc()->alloc(length, PAGE_SHIFT);
+		if (addr == (void *)-1) {
+			errno = ENOMEM;
+			return (void *)-1;
+		}
+
+		if (::pread(fd->libc_fd, addr, length, offset) < 0) {
+			PERR("mmap could not obtain file content");
+			::munmap(addr, length);
+			errno = EACCES;
+			return (void *)-1;
+		}
+
+		return addr;
+	}
+
+	int Plugin::munmap(void *addr, ::size_t)
+	{
+		Libc::mem_alloc()->free(addr);
+		return 0;
+	}
 
 	Libc::File_descriptor *Plugin::socket(int domain, int type, int protocol)
 	{
@@ -1210,112 +1365,6 @@ namespace {
 		}
 
 		return 0;
-	}
-
-
-	void Plugin::freeaddrinfo(struct addrinfo *res)
-	{
-#if 0
-		struct addrinfo *next;
-
-		while (res) {
-			if (res->ai_addr) {
-				free(res->ai_addr);
-			}
-
-			if (res->ai_canonname) {
-				free(res->ai_canonname);
-			}
-
-			next = res->ai_next;
-			free(res);
-			res = next;
-		}
-#endif
-	}
-
-
-	int Plugin::getaddrinfo(const char *hostname, const char *servname,
-			const struct addrinfo *hints, struct addrinfo **res)
-	{
-#if 0
-		const char *service = NULL;
-		/**
-		 * We have to fetch the portnumber manually because lwip only
-		 * supports getting the service by portnumber. So we first check
-		 * if servname is already a ascii portnumber and if it is not we
-		 * call getservent(servername, NULL).
-		 */
-		char buf[6] = { 0 };
-		int port = atoi(servname);
-		if (port <= 0 || port > 0xffff) {
-			struct servent *se = getservbyname(servname, NULL);
-			if (se != NULL) {
-				port = htons(se->s_port);
-				snprintf(buf, 6, "%d", port);
-				service = buf;
-			}
-			else {
-				return -1;
-			}
-		}
-		else
-			service = servname;
-
-		size_t len = strlen(hostname);
-		len = min(len, 255);
-		memcpy(sysio()->getaddrinfo_in.hostname, hostname, len);
-		sysio()->getaddrinfo_in.hostname[len] = '\0';
-
-		len = strlen(service);
-		len = min(len, 255);
-		memcpy(sysio()->getaddrinfo_in.servname, service, len);
-		sysio()->getaddrinfo_in.servname[len] = '\0';
-
-		if (!noux()->syscall(Noux::Session::SYSCALL_GETADDRINFO))
-			return -1;
-
-		struct addrinfo *rp = 0, *result;
-		for (int i = 0; i < sysio()->getaddrinfo_out.addr_num; i++) {
-			if (!rp) {
-				rp = (struct addrinfo *)malloc(sizeof (struct addrinfo));
-				*res = rp;
-			}
-			else {
-				rp->ai_next = (struct addrinfo *)malloc(sizeof (struct addrinfo));
-				rp = rp->ai_next;
-			}
-
-			rp->ai_flags     = sysio()->getaddrinfo_in.res[i].addrinfo.ai_flags;
-			rp->ai_family    = sysio()->getaddrinfo_in.res[i].addrinfo.ai_family;
-			rp->ai_socktype  = sysio()->getaddrinfo_in.res[i].addrinfo.ai_socktype;
-			rp->ai_protocol  = sysio()->getaddrinfo_in.res[i].addrinfo.ai_protocol;
-			rp->ai_addrlen   = sysio()->getaddrinfo_in.res[i].addrinfo.ai_addrlen;
-
-			if (sysio()->getaddrinfo_in.res[i].ai_addr.sa_len != 0) {
-				rp->ai_addr = (struct sockaddr *)malloc(sizeof (struct sockaddr));
-				memcpy(rp->ai_addr, &sysio()->getaddrinfo_in.res[i].ai_addr, sizeo
-						f (struct sockaddr));
-			}
-			else
-				rp->ai_addr = 0;
-
-			if (sysio()->getaddrinfo_in.res[i].ai_canonname != 0) {
-				size_t len = strlen(sysio()->getaddrinfo_in.res[i].ai_canonname) +
-					1;
-
-				rp->ai_canonname = (char *)malloc(len);
-				strncpy(rp->ai_canonname, sysio()->getaddrinfo_in.res[i].ai_canonn
-						ame, len);
-			}
-			else
-				rp->ai_canonname = 0;
-
-			rp->ai_next = 0;
-		}
-#endif
-
-		return -1;
 	}
 
 
