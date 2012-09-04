@@ -35,6 +35,7 @@ namespace Genode {
 			addr_t        _sel_exc_base;
 			unsigned      _cpu_no;
 			bool          _is_main_thread;
+			bool          _is_vcpu;
 
 			addr_t _sel_ec()       { return _id_base; }
 			addr_t _sel_sc()       { return _id_base + 1; }
@@ -61,21 +62,16 @@ namespace Genode {
 			 *
 			 * \param ip       instruction pointer to start at
 			 * \param sp       stack pointer to use
-			 * \param exc_base exception base of thread in caller
-			 *                 protection domain
-			 * \param vcpu     If true it will run as vCPU,
-			 *                 otherwise it will be a thread.
 			 *
 			 * \retval  0  successful
 			 * \retval -1  thread/vCPU could not be started
 			 */
-			int start(void *ip, void *sp, addr_t exc_base = ~0UL,
-			          bool vcpu = false);
+			int start(void *ip, void *sp);
 
 			/**
 			 * Pause this thread
 			 */
-			void pause();
+			Native_capability pause();
 
 			/**
 			 * Resume this thread
@@ -155,6 +151,8 @@ namespace Genode {
 				return Native_capability(
 					_sel_ec(), Obj_crd::RIGHT_EC_RECALL);
 			}
+
+			void single_step(bool on);
 
 	};
 }

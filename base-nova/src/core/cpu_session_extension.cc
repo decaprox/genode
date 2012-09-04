@@ -23,20 +23,30 @@ Native_capability
 Cpu_session_component::native_cap(Thread_capability thread_cap)
 {
 	Cpu_thread_component *thread = _lookup_thread(thread_cap);
-	if (!thread)
+	if (!thread || !thread->platform_thread())
 		return Native_capability::invalid_cap();
 
 	return thread->platform_thread()->native_cap();
 }
 
-int
-Cpu_session_component::start_exc_base_vcpu(Thread_capability thread_cap,
-                                           addr_t ip, addr_t sp, 
-                                           addr_t exc_base, bool vcpu)
+Native_capability
+Cpu_session_component::pause_sync(Thread_capability target_thread_cap)
 {
-	Cpu_thread_component *thread = _lookup_thread(thread_cap);
-	if (!thread) return -1;
+	Cpu_thread_component *thread = _lookup_thread(target_thread_cap);
+	if (!thread || !thread->platform_thread())
+		return Native_capability::invalid_cap();
 
-	return thread->platform_thread()->start((void *)ip, (void *)sp,
-	                                        exc_base, vcpu);
+	return thread->platform_thread()->pause();
+}
+
+void
+Cpu_session_component::single_step(Thread_capability thread_cap, bool enable)
+{
+	using namespace Genode;
+
+	Cpu_thread_component *thread = _lookup_thread(thread_cap);
+	if (!thread || !thread->platform_thread())
+		return;
+
+	thread->platform_thread()->single_step(enable);
 }

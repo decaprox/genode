@@ -178,6 +178,9 @@ void Ipc_istream::_wait()
 		tag = l4_ipc_wait(l4_utcb(), &label, L4_IPC_NEVER);
 	} while (ipc_error(tag, DEBUG_MSG));
 
+	/* copy received label into message buffer */
+	_rcv_msg->label(label);
+
 	/* copy message from the UTCBs message registers to the receive buffer */
 	copy_utcb_to_msgbuf(tag, _rcv_msg);
 
@@ -189,7 +192,7 @@ void Ipc_istream::_wait()
 Ipc_istream::Ipc_istream(Msgbuf_base *rcv_msg)
 :
 	Ipc_unmarshaller(&rcv_msg->buf[0], rcv_msg->size()),
-	Native_capability(cap_map()->find(Fiasco::l4_utcb_tcr()->user[Fiasco::UTCB_TCR_BADGE])),
+	Native_capability((Cap_index*)Fiasco::l4_utcb_tcr()->user[Fiasco::UTCB_TCR_BADGE]),
 	_rcv_msg(rcv_msg)
 {
 	_read_offset = sizeof(l4_mword_t);
@@ -294,6 +297,9 @@ void Ipc_server::_reply_wait()
 			 */
 			_wait();
 		} else {
+
+			/* copy received label into message buffer */
+			_rcv_msg->label(label);
 
 			/* copy request message from the UTCBs message registers */
 			copy_utcb_to_msgbuf(tag, _rcv_msg);
