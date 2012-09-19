@@ -92,14 +92,21 @@ void l4lx_thread_name_set(l4_cap_idx_t thread, const char *name)
 
 void l4lx_thread_init(void) { }
 
+void l4lx_thread_alloc_irq(l4_cap_idx_t c)
+{
+	Genode::Native_capability cap = L4lx::vcpu_connection()->alloc_irq();
+	l4_task_map(L4_BASE_TASK_CAP, L4_BASE_TASK_CAP,
+	            l4_obj_fpage(cap.dst(), 0, L4_FPAGE_RWX), c | L4_ITEM_MAP);
+}
 
 l4lx_thread_t l4lx_thread_create(L4_CV void (*thread_func)(void *data),
                                  unsigned cpu_nr,
                                  void *stack_pointer,
                                  void *stack_data, unsigned stack_data_size,
-                                 int prio,
+                                 l4_cap_idx_t l4cap, int prio,
                                  l4_vcpu_state_t **vcpu_state,
-                                 const char *name)
+                                 const char *name,
+                                 struct l4lx_thread_start_info_t *deferstart)
 {
 	using namespace L4lx;
 
@@ -119,10 +126,31 @@ l4lx_thread_t l4lx_thread_create(L4_CV void (*thread_func)(void *data),
 	}
 
 	Vcpu *vc = new (Genode::env()->heap()) Vcpu(name, thread_func,
-	                                            stack_data, 1024 * 64,
-	                                            (Genode::addr_t)addr);
+	                                            (unsigned long*)stack_data, 1024 * 64,
+	                                            (Genode::addr_t)addr,
+	                                            l4x_cpu_physmap_get_id(cpu_nr));
+
 	vcpus[thread_id(vc->utcb())] = vc;
+
+	if (!deferstart)
+		vc->start();
+	else {
+		deferstart->l4cap = (l4_cap_idx_t) vc;
+		deferstart->sp    = (l4_umword_t)vc->sp();
+		deferstart->ip    = (l4_umword_t)vc->ip();
+	}
+
 	return vc->utcb();
+}
+
+
+int l4lx_thread_start(struct l4lx_thread_start_info_t *startinfo)
+{
+	if (DEBUG)
+		PDBG("ip=%lx sp=%lx", startinfo->ip, startinfo->sp);
+	L4lx::Vcpu *vc = (L4lx::Vcpu*) startinfo->l4cap;
+	vc->start();
+	return 0;
 }
 
 
