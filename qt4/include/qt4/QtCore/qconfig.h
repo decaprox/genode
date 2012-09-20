@@ -355,6 +355,12 @@
 # define QT_RUNTIME_XRANDR
 #endif
 
+#if defined(QT_SQL_SQLITE) && defined(QT_NO_SQL_SQLITE)
+# undef QT_SQL_SQLITE
+#elif !defined(QT_SQL_SQLITE) && !defined(QT_NO_SQL_SQLITE)
+# define QT_SQL_SQLITE
+#endif
+
 #if defined(QT_USE_MATH_H_FLOATS) && defined(QT_NO_USE_MATH_H_FLOATS)
 # undef QT_USE_MATH_H_FLOATS
 #elif !defined(QT_USE_MATH_H_FLOATS) && !defined(QT_NO_USE_MATH_H_FLOATS)
