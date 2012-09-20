@@ -24,15 +24,16 @@
 #include <socket_io_channel.h>
 #include <shared_pointer.h>
 
-using namespace Noux;
-
 /* Libc includes */
 #include <sys/select.h>
 #include <sys/time.h>
 #include <netdb.h>
 
+using namespace Noux;
+
 void (*libc_select_notify)();
 void (*close_socket)(int);
+void (*cleanup_socket_descriptors)();
 
 /* set select() timeout to lwip's lowest possible value */
 struct timeval timeout = { 0, 10000 };
@@ -95,7 +96,15 @@ static void select_notify()
 
 static void _close_socket(int sd)
 {
-	Socket_descriptor_registry<Socket_io_channel>::instance()->remove_io_channel(sd);
+	if (Socket_descriptor_registry<Socket_io_channel>::instance()->sd_in_use(sd)) {
+		Socket_descriptor_registry<Socket_io_channel>::instance()->remove_io_channel(sd);
+	}
+}
+
+
+static void _cleanup_socket_descriptors()
+{
+	Socket_descriptor_registry<Socket_io_channel>::instance()->reset_all();
 }
 
 
@@ -105,7 +114,15 @@ static void _close_socket(int sd)
 
 void init_network()
 {
-	lwip_tcpip_init();
+	PINF("--- noux: initialize network ---");
+	
+	/**
+	 * NOTE: we only call lwip_nic_init() because
+	 * lwip_tcpip_init() was already called by libc_lwip's
+	 * constructor and we don't want to have another tcpip
+	 * thread.
+	 */
+
 	lwip_nic_init(0, 0, 0);
 
 	if (!libc_select_notify)
@@ -113,6 +130,9 @@ void init_network()
 
 	if (!close_socket)
 		close_socket = _close_socket;
+
+	if (!cleanup_socket_descriptors)
+		cleanup_socket_descriptors = _cleanup_socket_descriptors;
 }
 
 /*********************************
@@ -154,6 +174,8 @@ bool Noux::Child::_syscall_net(Noux::Session::Syscall sc)
 		case SYSCALL_UNLINK:
 		case SYSCALL_RENAME:
 		case SYSCALL_MKDIR:
+		case SYSCALL_FTRUNCATE:
+		case SYSCALL_USERINFO:
 			break;
 		case SYSCALL_SOCKET:
 			{
@@ -317,55 +339,6 @@ bool Noux::Child::_syscall_net(Noux::Session::Syscall sc)
 					return false;
 
 				return true;
-			}
-		case SYSCALL_GETADDRINFO:
-			{
-#if 0
-				struct addrinfo *result, *rp = NULL;
-
-				int res = lwip_getaddrinfo(_sysio->getaddrinfo_in.hostname,
-							_sysio->getaddrinfo_in.servname,
-							(const struct addrinfo *)&_sysio->getaddrinfo_in.hints,
-							&result);
-
-				if (res != 0) {
-					PERR("::getaddrinfo() returns %d", res);
-					return false;
-				}
-
-				PINF("SYSCALL_GETADDRINFO: deep-copy");
-				/* wipe-out old state */
-				memset(_sysio->getaddrinfo_in.res, 0, sizeof (_sysio->getaddrinfo_in.res));
-
-				int i = 0; rp = result;
-				while (i < Noux::Sysio::MAX_ADDRINFO_RESULTS && rp != NULL) {
-					memcpy(&_sysio->getaddrinfo_in.res[i].addrinfo, rp, sizeof (struct addrinfo));
-					if (rp->ai_addr) {
-						memcpy(&_sysio->getaddrinfo_in.res[i].ai_addr, rp->ai_addr, sizeof (struct sockaddr));
-					}
-					else
-						memset(&_sysio->getaddrinfo_in.res[i].ai_addr, 0, sizeof (struct sockaddr));
-
-					if (rp->ai_canonname) {
-						memcpy(&_sysio->getaddrinfo_in.res[i].ai_canonname,
-								rp->ai_canonname, strlen(rp->ai_canonname));
-						PINF("kopiere canonname: '%s'", rp->ai_canonname);
-					}
-					else
-						memset(&_sysio->getaddrinfo_in.res[i].ai_canonname, 0,
-								sizeof (_sysio->getaddrinfo_in.res[i].ai_canonname));
-
-					i++; rp = rp->ai_next;
-				}
-				
-				_sysio->getaddrinfo_out.addr_num = i;
-				PINF("SYSCALL_GETADDRINFO: deep-copy successfull");
-
-				lwip_freeaddrinfo(result);
-
-				return true;
-#endif
-				return false;
 			}
 	}
 

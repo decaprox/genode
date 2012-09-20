@@ -312,6 +312,33 @@ class Plugin : public Libc::Plugin
 			}
 		}
 
+		int ftruncate(Libc::File_descriptor *fd, ::off_t length)
+		{
+			using namespace Ffat;
+
+			/* 'f_truncate()' truncates to the current seek pointer */
+
+			if (lseek(fd, length, SEEK_SET) == -1)
+				return -1;
+
+			FRESULT res = f_truncate(_get_ffat_file(fd));
+
+			switch(res) {
+				case FR_OK:
+					return 0;
+				case FR_DISK_ERR:
+				case FR_INT_ERR:
+				case FR_NOT_READY:
+				case FR_INVALID_OBJECT:
+					errno = EIO;
+					return -1;
+				default:
+					/* not supposed to occur according to the libffat documentation */
+					PERR("f_truncate() returned an unexpected error code");
+					return -1;
+			}
+		}
+
 		ssize_t getdirentries(Libc::File_descriptor *fd, char *buf,
 		                      ::size_t nbytes, ::off_t *basep)
 		{
@@ -469,7 +496,7 @@ class Plugin : public Libc::Plugin
 				if ((flags & O_EXCL) == O_EXCL)
 					ffat_flags |= FA_CREATE_NEW;
 				else
-					ffat_flags |= FA_CREATE_ALWAYS;
+					ffat_flags |= FA_OPEN_ALWAYS;
 			}
 
 			FRESULT res = f_open(&ffat_file, pathname, ffat_flags);
@@ -478,7 +505,10 @@ class Plugin : public Libc::Plugin
 				case FR_OK: {
 					Plugin_context *context = new (Genode::env()->heap())
 						File_plugin_context(pathname, ffat_file);
-					return Libc::file_descriptor_allocator()->alloc(this, context);
+					Libc::File_descriptor *fd = Libc::file_descriptor_allocator()->alloc(this, context);
+					if ((flags & O_TRUNC) && (ftruncate(fd, 0) == -1))
+						return 0;
+					return fd;
 				}
 				case FR_NO_FILE: {
 					/*

@@ -11,49 +11,25 @@
  * under the terms of the GNU General Public License version 2.
  */
 
-/*
- * TODO
- *
- * ;- Child class
- * ;- Pass args and env to child
- * ;- Receive args by child
- * ;- run 'echo hello'
- * ;- run 'seq 10'
- * ;- skeleton of noux RPC interface
- * ;- run 'pwd'
- * ;- move _write->LOG to libc plugin
- * ;- stdio (implementation of _write)
- * ;- vfs
- * ;- TAR file system
- * ;- run 'ls -lRa' (dirent syscall)
- * ;- run 'cat' (read syscall)
- * ;- execve
- * ;- fork
- * ;- pipe
- * ;- read init binary from vfs
- * ;- import env into child (execve and fork)
- * ;- shell
- * - debug 'find'
- * ;- stacked file system infrastructure
- * ;- TMP file system
- * ;- RAM service using a common quota pool
- */
-
 /* Genode includes */
 #include <cap_session/connection.h>
 #include <os/config.h>
+#include <os/alarm.h>
+#include <timer_session/connection.h>
 
 /* Noux includes */
 #include <child.h>
 #include <child_env.h>
+#include <noux_session/sysio.h>
 #include <vfs_io_channel.h>
 #include <terminal_io_channel.h>
 #include <dummy_input_io_channel.h>
 #include <pipe_io_channel.h>
 #include <dir_file_system.h>
+#include <user_info.h>
 
 
-enum { verbose_syscall = true };
+static bool trace_syscalls = false;
 
 
 namespace Noux {
@@ -64,12 +40,79 @@ namespace Noux {
 	void init_process_exited() { init_child = 0; }
 };
 
-
-extern "C" void wait_for_continue();
-
 extern void (*close_socket)(int);
 
 extern void init_network();
+
+
+/**
+ * Timeout thread for SYSCALL_SELECT
+ */
+
+namespace Noux {
+	using namespace Genode;
+
+	class Timeout_scheduler : Thread<4096>, public Alarm_scheduler
+	{
+		private:
+			Timer::Connection _timer;
+			Alarm::Time       _curr_time;
+
+			enum { TIMER_GRANULARITY_MSEC = 10 };
+
+			void entry()
+			{
+				for (;;) {
+					_timer.msleep(TIMER_GRANULARITY_MSEC);
+					Alarm_scheduler::handle(_curr_time);
+					_curr_time += TIMER_GRANULARITY_MSEC;
+				}
+			}
+
+		public:
+			Timeout_scheduler() : _curr_time(0) { start(); }
+
+			Alarm::Time curr_time() const { return _curr_time; }
+	};
+
+	struct Timeout_state
+	{
+		bool timed_out;
+
+		Timeout_state() : timed_out(false)  { }
+	};
+
+	class Timeout_alarm : public Alarm
+	{
+		private:
+			Timeout_state     *_state;
+			Semaphore         *_blocker;
+			Timeout_scheduler *_scheduler;
+
+		public:
+			Timeout_alarm(Timeout_state *st, Semaphore *blocker, Timeout_scheduler *scheduler, Time timeout)
+				:
+					_state(st),
+					_blocker(blocker),
+					_scheduler(scheduler)
+		{
+			_scheduler->schedule_absolute(this, _scheduler->curr_time() + timeout);
+			_state->timed_out = false;
+		}
+
+			void discard() { _scheduler->discard(this); }
+
+		protected:
+			bool on_alarm()
+			{
+				_state->timed_out = true;
+				_blocker->up();
+
+				return false;
+			}
+	};
+};
+
 
 /*****************************
  ** Noux syscall dispatcher **
@@ -77,7 +120,7 @@ extern void init_network();
 
 bool Noux::Child::syscall(Noux::Session::Syscall sc)
 {
-	if (verbose_syscall)
+	if (trace_syscalls)
 		Genode::printf("PID %d -> SYSCALL %s\n",
 		               pid(), Noux::Session::syscall_name(sc));
 
@@ -98,8 +141,9 @@ bool Noux::Child::syscall(Noux::Session::Syscall sc)
 
 					Shared_pointer<Io_channel> io = _lookup_channel(_sysio->write_in.fd);
 
-					if (!io->check_unblock(false, true, false))
-						_block_for_io_channel(io);
+					if (!io->is_nonblocking())
+						if (!io->check_unblock(false, true, false))
+							_block_for_io_channel(io);
 
 					/*
 					 * 'io->write' is expected to update 'write_out.count'
@@ -114,18 +158,44 @@ bool Noux::Child::syscall(Noux::Session::Syscall sc)
 			{
 				Shared_pointer<Io_channel> io = _lookup_channel(_sysio->read_in.fd);
 
+				if (!io->is_nonblocking())
+					while (!io->check_unblock(true, false, false))
+						_block_for_io_channel(io);
+
+				io->read(_sysio);
+				if (_sysio->read_out.count == -1)
+					return false;
+
+				return true;
+			}
+
+		case SYSCALL_FTRUNCATE:
+			{
+				Shared_pointer<Io_channel> io = _lookup_channel(_sysio->ftruncate_in.fd);
+
 				while (!io->check_unblock(true, false, false))
 					_block_for_io_channel(io);
 
-				io->read(_sysio);
-				return true;
+				return io->ftruncate(_sysio);
 			}
 
 		case SYSCALL_STAT:
 		case SYSCALL_LSTAT: /* XXX implement difference between 'lstat' and 'stat' */
+			{
+				bool result = _root_dir->stat(_sysio, Absolute_path(_sysio->stat_in.path,
+			                                      _env.pwd()).base());
 
-			return _root_dir->stat(_sysio, Absolute_path(_sysio->stat_in.path,
-			                                             _env.pwd()).base());
+				/**
+ 				 * Instead of using the uid/gid given by the actual file system
+				 * we use the ones specificed in the config.
+				 */
+				if (result) {
+					_sysio->stat_out.st.uid = user_info()->uid;
+					_sysio->stat_out.st.gid = user_info()->gid;
+				}
+
+				return result;
+			}
 
 		case SYSCALL_FSTAT:
 
@@ -251,6 +321,14 @@ bool Noux::Child::syscall(Noux::Session::Syscall sc)
 		case SYSCALL_SELECT:
 			{
 				Sysio::Select_fds &in_fds = _sysio->select_in.fds;
+				size_t in_fds_total = in_fds.total_fds();
+
+				int _rd_array[in_fds_total];
+				int _wr_array[in_fds_total];
+
+				long timeout_sec     = _sysio->select_in.timeout.sec;
+				long timeout_usec    = _sysio->select_in.timeout.usec;
+				bool timeout_reached = false;
 
 				/*
 				 * Block for one action of the watched file descriptors
@@ -262,7 +340,12 @@ bool Noux::Child::syscall(Noux::Session::Syscall sc)
 					 * unblock condition. Return if one I/O channel satisfies
 					 * the condition.
 					 */
-					for (Genode::size_t i = 0; i < in_fds.total_fds(); i++) {
+					size_t unblock_rd = 0;
+					size_t unblock_wr = 0;
+					size_t unblock_ex = 0;
+					
+					/* process read fds */
+					for (Genode::size_t i = 0; i < in_fds_total; i++) {
 
 						int fd = in_fds.array[i];
 						if (!fd_in_use(fd)) continue;
@@ -270,29 +353,50 @@ bool Noux::Child::syscall(Noux::Session::Syscall sc)
 						Shared_pointer<Io_channel> io = io_channel_by_fd(fd);
 
 						if (io->check_unblock(in_fds.watch_for_rd(i),
-						                      in_fds.watch_for_wr(i),
-						                      in_fds.watch_for_ex(i))) {
+								      in_fds.watch_for_wr(i),
+								      in_fds.watch_for_ex(i))) {
 
-							/*
-							 * Return single file descriptor that triggered the
-							 * unblocking. For now, only a single file
-							 * descriptor is returned on each call of select.
-							 */
-							Sysio::Select_fds &out_fds = _sysio->select_out.fds;
+							if (io->check_unblock(true, false, false)) {
+								_rd_array[unblock_rd++] = fd;
+							//	io->clear_unblock(true, false, false);
+							}
+							if (io->check_unblock(false, true, false)) {
+								_wr_array[unblock_wr++] = fd;
+							//	io->clear_unblock(false, true, false);
+							}
 
-							out_fds.array[0] = fd;
-							out_fds.num_rd   = io->check_unblock(true, false, false);
-							out_fds.num_wr   = io->check_unblock(false, true, false);
-							out_fds.num_ex   = io->check_unblock(false, false, true);
+							if (io->check_unblock(false, false, true)) {
+								unblock_ex++;
+							//	io->clear_unblock(false, false, true);
+							}
 
-							return true;
 						}
+					}
+
+					if (unblock_rd || unblock_wr || unblock_ex) {
+						for (size_t i = 0; i < unblock_rd; i++) {
+							_sysio->select_out.fds.array[i] = _rd_array[i];
+							_sysio->select_out.fds.num_rd = unblock_rd;
+						}
+						for (size_t i = 0; i < unblock_wr; i++) {
+							_sysio->select_out.fds.array[i] = _wr_array[i];
+							_sysio->select_out.fds.num_wr = unblock_wr;
+						}
+
+						_sysio->select_out.fds.num_ex = unblock_ex;
+
+						return true;
 					}
 
 					/*
 					 * Return if I/O channel triggered, but timeout exceeded
 					 */
-					if (_sysio->select_in.timeout.zero()) {
+					
+					if (_sysio->select_in.timeout.zero() || timeout_reached) {
+						/*
+						if (timeout_reached) PINF("timeout_reached");
+						else                 PINF("timeout.zero()");
+						*/
 						_sysio->select_out.fds.num_rd = 0;
 						_sysio->select_out.fds.num_wr = 0;
 						_sysio->select_out.fds.num_ex = 0;
@@ -312,9 +416,10 @@ bool Noux::Child::syscall(Noux::Session::Syscall sc)
 					 *     conditions such as the destruction of the child.
 					 *     ...to be done.
 					 */
-					Wake_up_notifier notifiers[in_fds.total_fds()];
 
-					for (Genode::size_t i = 0; i < in_fds.total_fds(); i++) {
+					Wake_up_notifier notifiers[in_fds_total];
+
+					for (Genode::size_t i = 0; i < in_fds_total; i++) {
 						int fd = in_fds.array[i];
 						if (!fd_in_use(fd)) continue;
 
@@ -326,18 +431,42 @@ bool Noux::Child::syscall(Noux::Session::Syscall sc)
 					/*
 					 * Block at barrier except when reaching the timeout
 					 */
-					_blocker.down();
+
+					if (!_sysio->select_in.timeout.infinite()) {
+						unsigned long to_msec = (timeout_sec * 1000) + (timeout_usec / 1000);
+						Timeout_state ts;
+						Timeout_alarm ta(&ts, &_blocker, Noux::timeout_scheduler(), to_msec);
+
+						/* block until timeout is reached or we were unblocked */
+						_blocker.down();
+
+						if (ts.timed_out) {
+							timeout_reached = 1;
+						}
+						else {
+							/*
+							 * We woke up before reaching the timeout,
+							 * so we discard the alarm
+							 */
+							ta.discard();
+						}
+					}
+					else {
+						/* let's block infinitely */
+						_blocker.down();
+					}
 
 					/*
 					 * Unregister barrier at watched I/O channels
 					 */
-					for (Genode::size_t i = 0; i < in_fds.total_fds(); i++) {
+					for (Genode::size_t i = 0; i < in_fds_total; i++) {
 						int fd = in_fds.array[i];
 						if (!fd_in_use(fd)) continue;
 
 						Shared_pointer<Io_channel> io = io_channel_by_fd(fd);
 						io->unregister_wake_up_notifier(&notifiers[i]);
 					}
+
 				}
 
 				return true;
@@ -452,6 +581,33 @@ bool Noux::Child::syscall(Noux::Session::Syscall sc)
 			return _root_dir->mkdir(_sysio, Absolute_path(_sysio->mkdir_in.path,
 			                                              _env.pwd()).base());
 
+		case SYSCALL_USERINFO:
+			{
+				if (_sysio->userinfo_in.request == Sysio::USERINFO_GET_UID
+				    || _sysio->userinfo_in.request == Sysio::USERINFO_GET_GID) {
+					_sysio->userinfo_out.uid = Noux::user_info()->uid;
+					_sysio->userinfo_out.gid = Noux::user_info()->gid;
+
+					return true;
+				}
+
+				/*
+				 * Since NOUX supports exactly one user, return false if we
+				 * got a unknown uid.
+				 */
+				if (_sysio->userinfo_in.uid != Noux::user_info()->uid)
+					return false;
+
+				Genode::memcpy(_sysio->userinfo_out.name,  Noux::user_info()->name,  sizeof(Noux::user_info()->name));
+				Genode::memcpy(_sysio->userinfo_out.shell, Noux::user_info()->shell, sizeof(Noux::user_info()->shell));
+				Genode::memcpy(_sysio->userinfo_out.home,  Noux::user_info()->home,  sizeof(Noux::user_info()->home));
+
+				_sysio->userinfo_out.uid = user_info()->uid;
+				_sysio->userinfo_out.gid = user_info()->gid;
+
+				return true;
+			}
+
 		case SYSCALL_SOCKET:
 		case SYSCALL_GETSOCKOPT:
 		case SYSCALL_SETSOCKOPT:
@@ -465,10 +621,9 @@ bool Noux::Child::syscall(Noux::Session::Syscall sc)
 		case SYSCALL_GETPEERNAME:
 		case SYSCALL_SHUTDOWN:
 		case SYSCALL_CONNECT:
-		case SYSCALL_GETADDRINFO:
-			{
-				return _syscall_net(sc);
-			}
+
+			return _syscall_net(sc);
+
 		case SYSCALL_INVALID: break;
 		}
 	}
@@ -523,42 +678,16 @@ static Noux::Args const &args_of_init_process()
 }
 
 
-static void quote(char *buf, Genode::size_t buf_len)
-{
-	/*
-	 * Make sure to leave space at the end of buffer for the finishing '"' and
-	 * the null-termination.
-	 */
-	char c = '"';
-	unsigned i = 0;
-	for (; c && (i + 2 < buf_len); i++)
-	{
-		/*
-		 * So shouldn't this have a special case for '"' characters inside the
-		 * string? This is actually not needed because such a string could
-		 * never be constructed via the XML config anyway. You can sneak in '"'
-		 * characters only by quoting them in the XML file. Then, however, they
-		 * are already quoted.
-		 */
-		char next_c = buf[i];
-		buf[i] = c;
-		c = next_c;
-	}
-	buf[i + 0] = '"';
-	buf[i + 1] = 0;
-}
-
-
 /**
  * Return string containing the environment variables of init
  *
- * The string is formatted according to the 'Genode::Arg_string' rules.
+ * The variable definitions are separated by zeros. The end of the string is
+ * marked with another zero.
  */
-static char const *env_string_of_init_process()
+static Noux::Sysio::Env &env_string_of_init_process()
 {
-	static char env_buf[4096];
-
-	Genode::Arg_string::set_arg(env_buf, sizeof(env_buf), "PWD", "\"/\"");
+	static Noux::Sysio::Env env;
+	int index = 0;
 
 	/* read environment variables for init process from config */
 	Genode::Xml_node start_node = Genode::config()->xml_node().sub_node("start");
@@ -569,21 +698,42 @@ static char const *env_string_of_init_process()
 
 			arg_node.attribute("name").value(name_buf, sizeof(name_buf));
 			arg_node.attribute("value").value(value_buf, sizeof(value_buf));
-			quote(value_buf, sizeof(value_buf));
 
-			Genode::Arg_string::set_arg(env_buf, sizeof(env_buf),
-			                            name_buf, value_buf);
+			Genode::size_t env_var_size = Genode::strlen(name_buf) +
+			                              Genode::strlen("=") +
+			                              Genode::strlen(value_buf) + 1;
+			if (index + env_var_size < sizeof(env)) {
+				Genode::snprintf(&env[index], env_var_size, "%s=%s", name_buf, value_buf);
+				index += env_var_size;
+			} else {
+				env[index] = 0;
+				break;
+			}
 		}
 	}
 	catch (Genode::Xml_node::Nonexistent_sub_node) { }
 
-	return env_buf;
+	return env;
 }
 
 
 Noux::Pid_allocator *Noux::pid_allocator()
 {
 	static Noux::Pid_allocator inst;
+	return &inst;
+}
+
+
+Noux::Timeout_scheduler *Noux::timeout_scheduler()
+{
+	static Noux::Timeout_scheduler inst;
+	return &inst;
+}
+
+
+Noux::User_info* Noux::user_info()
+{
+	static Noux::User_info inst;
 	return &inst;
 }
 
@@ -611,12 +761,24 @@ int main(int argc, char **argv)
 
 	static Genode::Cap_connection cap;
 
+	/* obtain global configuration */
+	try {
+		trace_syscalls = config()->xml_node().attribute("trace_syscalls").has_value("yes");
+	} catch (Xml_node::Nonexistent_attribute) { }
+
 	/* initialize virtual file system */
 	static Dir_file_system
 		root_dir(config()->xml_node().sub_node("fstab"));
 
+	/* set user information */
+	try {
+		user_info()->set_info(config()->xml_node().sub_node("user"));
+	}
+	catch (...) { }
+
 	/* initialize network */
 	init_network();
+
 	/*
 	 * Entrypoint used to virtualize child resources such as RAM, RM
 	 */

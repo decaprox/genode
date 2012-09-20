@@ -47,6 +47,7 @@ int main(int argc, char *argv[])
 	char const *file_name     = "test.tst";
 	char const *file_name2    = "test2.tst";
 	char const *file_name3    = "test3.tst";
+	char const *file_name4    = "test4.tst";
 	char const *pattern       = "a single line of text";
 
 	size_t      pattern_size  = strlen(pattern) + 1;
@@ -71,6 +72,10 @@ int main(int argc, char *argv[])
 		/* write pattern to a file */
 		CALL_AND_CHECK(fd, open(file_name, O_CREAT | O_WRONLY), fd >= 0, "file_name=%s", file_name);
 		CALL_AND_CHECK(count, write(fd, pattern, pattern_size), (size_t)count == pattern_size, "");
+		CALL_AND_CHECK(ret, close(fd), ret == 0, "");
+
+		/* open the file with O_CREAT again (should have no effect on the file) */
+		CALL_AND_CHECK(fd, open(file_name, O_CREAT | O_WRONLY), fd >= 0, "file_name=%s", file_name);
 		CALL_AND_CHECK(ret, close(fd), ret == 0, "");
 
 		/* query file status of new file */
@@ -161,9 +166,32 @@ int main(int argc, char *argv[])
 			}
 		}
 
+		/* test 'ftruncate()' */
+		CALL_AND_CHECK(fd, open(file_name4, O_CREAT | O_WRONLY), fd >= 0, "file_name=%s", file_name4);
+		CALL_AND_CHECK(ret, ftruncate(fd, 100), ret == 0, ""); /* increase size */
+		CALL_AND_CHECK(ret, close(fd), ret == 0, "");
+		CALL_AND_CHECK(ret, stat(file_name4, &stat_buf),
+		               (ret == 0) && (stat_buf.st_size == 100),
+		               "file_name=%s", file_name4);
+		CALL_AND_CHECK(fd, open(file_name4, O_WRONLY), fd >= 0, "file_name=%s", file_name4);
+		CALL_AND_CHECK(ret, ftruncate(fd, 10), ret == 0, ""); /* decrease size */
+		CALL_AND_CHECK(ret, close(fd), ret == 0, "");
+		CALL_AND_CHECK(ret, stat(file_name4, &stat_buf),
+		               (ret == 0) && (stat_buf.st_size == 10),
+		               "file_name=%s", file_name4);
+
+		/* test 'O_TRUNC' flag */
+		CALL_AND_CHECK(fd, open(file_name4, O_WRONLY | O_TRUNC), fd >= 0, "file_name=%s", file_name4);
+		CALL_AND_CHECK(ret, close(fd), ret == 0, "");
+		CALL_AND_CHECK(ret, stat(file_name4, &stat_buf),
+		               (ret == 0) && (stat_buf.st_size == 0),
+		               "file_name=%s", file_name4);
+
 		if (i < (iterations - 1))
 			sleep(2);
 	}
+
+	printf("test finished\n");
 
 	return 0;
 }

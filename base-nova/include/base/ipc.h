@@ -17,22 +17,21 @@
 #include <base/ipc_generic.h>
 
 
-inline void Genode::Ipc_ostream::_marshal_capability(Genode::Native_capability const &cap)
+inline void
+Genode::Ipc_ostream::_marshal_capability(Genode::Native_capability const &cap)
 {
-	long unique_id = cap.valid() ? cap.local_name() : ~0L;
-	_write_to_buf(unique_id);
-
 	if (cap.valid())
-		_snd_msg->snd_append_pt_sel(cap.dst());
+		_snd_msg->snd_append_pt_sel(cap.local_name(),
+		                            cap.dst().rights(),
+		                            cap.trans_map());
 }
 
 
-inline void Genode::Ipc_istream::_unmarshal_capability(Genode::Native_capability &cap)
+inline void
+Genode::Ipc_istream::_unmarshal_capability(Genode::Native_capability &cap)
 {
-	long unique_id = 0;
-	_read_from_buf(unique_id);
-	int pt_sel = unique_id != ~0L ? _rcv_msg->rcv_pt_sel() : 0;
-	cap = Native_capability(pt_sel, unique_id);
+	addr_t pt_sel = _rcv_msg->rcv_pt_sel();
+	cap = Native_capability(pt_sel);
 }
 
 #endif /* _INCLUDE__BASE__IPC_H_ */

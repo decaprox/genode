@@ -30,7 +30,9 @@ QT4_INC_DIR := $(QT4_REP_DIR)/src/lib/qt4/mkspecs/qws/genode-x86-g++ \
                $(QT4_REP_DIR)/include/qt4/QtWebKit \
                $(QT4_REP_DIR)/contrib/$(QT4)/include/QtWebKit \
                $(QT4_REP_DIR)/include/qt4/QtXml \
-               $(QT4_REP_DIR)/contrib/$(QT4)/include/QtXml
+               $(QT4_REP_DIR)/contrib/$(QT4)/include/QtXml \
+               $(QT4_REP_DIR)/include/qt4/QtSql \
+               $(QT4_REP_DIR)/contrib/$(QT4)/include/QtSql
 
 INC_DIR += $(QT4_INC_DIR)
 
@@ -114,8 +116,9 @@ INC_DIR += $(QT4_REP_DIR)/include/genode
 #
 # We cannot just extend the 'LIBS' variable here because 'import-*.mk' are
 # included (in 'base/mk/lib.mk') by iterating through the elements of the
-# 'LIBS' variable. Hence, we need to manually import the stdlib snippet.
+# 'LIBS' variable. Hence, we also need to manually import the stdlib snippet.
 #
+LIBS += stdcxx
 include $(call select_from_repositories,lib/import/import-stdcxx.mk)
 
 # custom main() thread stack size support via main() wrapper

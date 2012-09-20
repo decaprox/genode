@@ -49,8 +49,6 @@ static void copy_utcb_to_msgbuf(Nova::Utcb *utcb, Msgbuf_base *rcv_msg)
 	mword_t *dst = (mword_t *)&msg_buf[0];
 	for (unsigned i = 0; i < num_msg_words; i++)
 		*dst++ = *src++;
-
-	rcv_msg->rcv_reset();
 }
 
 
@@ -84,10 +82,11 @@ static bool copy_msgbuf_to_utcb(Nova::Utcb *utcb, Msgbuf_base *snd_msg,
 
 	/* append portal capability selectors */
 	for (unsigned i = 0; i < snd_msg->snd_pt_sel_cnt(); i++) {
-		int pt_sel = snd_msg->snd_pt_sel(i);
-		if (pt_sel < 0) continue;
+		bool trans_map = true;
+		Nova::Obj_crd crd = snd_msg->snd_pt_sel(i, trans_map);
+		if (crd.base() == ~0UL) continue;
 
-		if (!utcb->append_item(Nova::Obj_crd(pt_sel, 0), i))
+		if (!utcb->append_item(crd, i, false, false, trans_map))
 			return false;
 	}
 
@@ -141,16 +140,18 @@ void Ipc_client::_call()
 		PERR("could not setup IPC");
 		return;
 	}
-	_rcv_msg->rcv_prepare_pt_sel_window(utcb);
+	_rcv_msg->rcv_prepare_pt_sel_window(utcb, Ipc_ostream::_dst.rcv_window());
 
 	/* establish the mapping via a portal traversal */
-	uint8_t res = Nova::call(Ipc_ostream::_dst.dst());
-	if (res) {
+	uint8_t res = Nova::call(Ipc_ostream::_dst.local_name());
+	if (res != Nova::NOVA_OK) {
 		/* If an error occurred, reset word&item count (not done by kernel). */
 		utcb->set_msg_word(0);
-		PERR("call returned %u", res);
+		/* set return value for ipc_generic part if call failed */
+		ret(ERR_INVALID_OBJECT);
 	}
 
+	_rcv_msg->post_ipc(utcb);
 	copy_utcb_to_msgbuf(utcb, _rcv_msg);
 	_snd_msg->snd_reset();
 
@@ -179,6 +180,7 @@ void Ipc_server::_wait()
 
 	Nova::Utcb *utcb = (Nova::Utcb *)Thread_base::myself()->utcb();
 
+	_rcv_msg->post_ipc(utcb);
 	copy_utcb_to_msgbuf(utcb, _rcv_msg);
 
 	/* reset unmarshaller */

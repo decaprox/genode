@@ -110,6 +110,13 @@ bool Plugin::supports_unlink(const char*)
 	return false;
 }
 
+
+bool Plugin::supports_mmap()
+{
+	return false;
+}
+
+
 /**
  * Default implementations
  */
@@ -154,6 +161,7 @@ DUMMY(int,     -1, fchdir,        (File_descriptor *));
 DUMMY(int,     -1, fcntl,         (File_descriptor *, int cmd, long arg));
 DUMMY(int,     -1, fstat,         (File_descriptor *, struct stat *));
 DUMMY(int,     -1, fsync,         (File_descriptor *));
+DUMMY(int,     -1, ftruncate,     (File_descriptor *, ::off_t));
 DUMMY(ssize_t, -1, getdirentries, (File_descriptor *, char *, ::size_t, ::off_t *));
 DUMMY(int,     -1, getpeername,   (File_descriptor *, struct sockaddr *, socklen_t *));
 DUMMY(int,     -1, getsockname,   (File_descriptor *, struct sockaddr *, socklen_t *));
@@ -180,6 +188,7 @@ DUMMY(int, -1, getaddrinfo,  (const char *, const char *, const struct ::addrinf
 DUMMY(int, -1, mkdir,        (const char*, mode_t));
 DUMMY(void *, (void *)(-1), mmap, (void *addr, ::size_t length, int prot, int flags,
                                    File_descriptor *, ::off_t offset));
+DUMMY(int, -1, munmap,       (void *, ::size_t));
 DUMMY(int, -1, pipe,         (File_descriptor*[2]));
 DUMMY(int, -1, rename,       (const char *, const char *));
 DUMMY(int, -1, select,       (int, fd_set *, fd_set *, fd_set *, struct timeval *));

@@ -2,6 +2,7 @@
  * \brief  Syscall bindings for the NOVA microhypervisor
  * \author Norman Feske
  * \author Sebastian Sumpf
+ * \author Alexander Boettcher
  * \date   2009-12-27
  */
 
@@ -44,7 +45,7 @@ namespace Nova {
 	};
 
 	/**
-	 * NOVA sytem-call IDs
+	 * NOVA system-call IDs
 	 */
 	enum Syscall {
 		NOVA_CALL       = 0x0,
@@ -63,6 +64,21 @@ namespace Nova {
 		NOVA_ASSIGN_GSI = 0xd,
 	};
 
+	/**
+	 * NOVA status codes returned by system-calls
+	 */
+        enum Status
+        {
+            NOVA_OK             = 0,
+            NOVA_IPC_TIMEOUT    = 1,
+            NOVA_IPC_ABORT      = 2,
+            NOVA_INV_HYPERCALL  = 3,
+            NOVA_INV_SELECTOR   = 4,
+            NOVA_INV_PARAMETER  = 5,
+            NOVA_INV_FEATURE    = 6,
+            NOVA_INV_CPU_NUMBER = 7,
+            NOVA_INVD_DEVICE_ID = 8,
+        };
 
 	/**
 	 * Hypervisor information page
@@ -156,9 +172,12 @@ namespace Nova {
 
 			enum {
 				ACDB = 1 << 0,   /* eax, ecx, edx, ebx */
+				EBSD = 1 << 1,   /* ebp, esi, edi */
 				ESP  = 1 << 2,
 				EIP  = 1 << 3,
 				EFL  = 1 << 4,   /* eflags */
+				FSGS = 1 << 6,
+				CSSS = 1 << 7,
 				QUAL = 1 << 15,  /* exit qualification */
 				CTRL = 1 << 16,  /* execution controls */
 				INJ  = 1 << 17,  /* injection info */
@@ -184,9 +203,10 @@ namespace Nova {
 			 */
 			enum {
 				TYPE_MASK   = 0x3,  TYPE_SHIFT  =  0,
-				BASE_SHIFT  = 12,   RIGHTS_MASK = 0x7c,
+				BASE_SHIFT  = 12,   RIGHTS_MASK = 0x1f,
 				ORDER_MASK  = 0x1f, ORDER_SHIFT =  7,
-				BASE_MASK   = (~0UL) >> BASE_SHIFT
+				BASE_MASK   = (~0UL) >> BASE_SHIFT,
+				RIGHTS_SHIFT= 2
 			};
 
 			/**
@@ -197,9 +217,7 @@ namespace Nova {
 				MEM_CRD_TYPE    = 1,
 				IO_CRD_TYPE     = 2,
 				OBJ_CRD_TYPE    = 3,
-				RIGHTS_ALL      = 0x7c,
-				IO_CRD_ALL      = IO_CRD_TYPE | RIGHTS_ALL,
-				OBJ_CRD_ALL     = OBJ_CRD_TYPE | RIGHTS_ALL,
+				RIGHTS_ALL      = 0x1f,
 			};
 
 			void _base(mword_t base)
@@ -228,6 +246,7 @@ namespace Nova {
 			mword_t order() const { return _query<ORDER_MASK, ORDER_SHIFT>(); }
 			bool is_null()  const { return (_value & TYPE_MASK) == NULL_CRD_TYPE; }
 			uint8_t type()  const { return _query<TYPE_MASK, TYPE_SHIFT>(); }
+			uint8_t rights() const { return _query<RIGHTS_MASK, RIGHTS_SHIFT>(); }
 	} __attribute__((packed));
 
 
@@ -299,7 +318,8 @@ namespace Nova {
 			Io_crd(mword_t base, mword_t order)
 			: Crd(base, order)
 			{
-				_assign<TYPE_MASK | RIGHTS_MASK, TYPE_SHIFT>(IO_CRD_ALL);
+				_assign<TYPE_MASK, TYPE_SHIFT>(IO_CRD_TYPE);
+				_assign<RIGHTS_MASK, RIGHTS_SHIFT>(RIGHTS_ALL);
 			}
 	};
 
@@ -308,10 +328,21 @@ namespace Nova {
 	{
 		public:
 
-			Obj_crd(mword_t base, mword_t order)
+			enum {
+				RIGHT_EC_RECALL = 0x1U,
+			};
+
+			Obj_crd() : Crd(0, 0)
+			{
+				_assign<TYPE_MASK, TYPE_SHIFT>(NULL_CRD_TYPE);
+			}
+	
+			Obj_crd(mword_t base, mword_t order,
+			        mword_t rights = RIGHTS_ALL)
 			: Crd(base, order)
 			{
-				_assign<TYPE_MASK | RIGHTS_MASK, TYPE_SHIFT>(OBJ_CRD_ALL);
+				_assign<TYPE_MASK, TYPE_SHIFT>(OBJ_CRD_TYPE);
+				_assign<RIGHTS_MASK, RIGHTS_SHIFT>(rights);
 			}
 	};
 
@@ -356,9 +387,13 @@ namespace Nova {
 	 */
 	struct Utcb
 	{
-		mword_t  items;     /* number of untyped items uses lowest 16 bit, number of typed items uses bit 16-31, bit 32+ are ignored on 64bit */
-		Crd      crd_xlt;   /* receive capability-range descriptor for translation */
-		Crd      crd_rcv;   /* receive capability-range descriptor for delegation */
+		/**
+		 * Number of untyped items uses lowest 16 bit, number of typed items
+		 * uses bit 16-31, bit 32+ are ignored on 64bit
+		 */
+		mword_t items;
+		Crd     crd_xlt;   /* receive capability-range descriptor for translation */
+		Crd     crd_rcv;   /* receive capability-range descriptor for delegation */
 		mword_t tls;
 
 		/**
@@ -374,24 +409,45 @@ namespace Nova {
 
 			/* exception state */
 			struct {
-				mword_t mtd, instr_len, eip, eflags;
-				unsigned misc[4];
-				mword_t eax, ecx, edx, ebx;
-				mword_t esp, ebp, esi, edi;
+				mword_t mtd, instr_len, ip, flags;
+				unsigned intr_state, actv_state, inj_info, inj_error;
+				mword_t ax, cx, dx, bx;
+				mword_t sp, bp, si, di;
 #ifdef __x86_64__
-				mword_t rxx[8];
+				mword_t r8, r9, r10, r11, r12, r13, r14, r15;
 #endif
 				unsigned long long qual[2];  /* exit qualification */
 				unsigned ctrl[2];
 				unsigned long long tsc;
 				mword_t cr0, cr2, cr3, cr4;
-//				unsigned misc3[44];
-			};
+#ifdef __x86_64__
+				mword_t cr8, reserved;
+#endif
+				mword_t dr7, sysenter_cs, sysenter_sp, sysenter_ip;
+
+				struct {
+					unsigned short sel, ar;
+					unsigned limit;
+					mword_t  base;
+#ifdef __x86_32__
+					mword_t  reserved;	
+#endif
+				} es, cs, ss, ds, fs, gs, ldtr, tr;
+				struct {
+					unsigned reserved0;
+					unsigned limit;
+					mword_t  base;
+#ifdef __x86_32__
+					mword_t  reserved1;	
+#endif
+				} gdtr, idtr;
+			} __attribute__((packed));
 		};
 
 		struct Item {
 			mword_t crd;
 			mword_t hotspot;
+			bool is_del() { return hotspot & 0x1; }
 		};
 
 		/**
@@ -415,7 +471,8 @@ namespace Nova {
 		__attribute__((warn_unused_result))
 		bool append_item(Crd crd, mword_t sel_hotspot,
 		                 bool kern_pd = false,
-		                 bool update_guest_pt = false)
+		                 bool update_guest_pt = false,
+		                 bool translate_map = false)
 		{
 			/* transfer items start at the end of the UTCB */
 			items += 1 << 16;
@@ -433,10 +490,22 @@ namespace Nova {
 			/* update guest page table */
 			unsigned g = update_guest_pt ? (1 << 10) : 0;
 
-			item->hotspot = crd.hotspot(sel_hotspot) | g | h | 1;
+			item->hotspot = crd.hotspot(sel_hotspot) | g | h | (translate_map ? 2 : 1);
 			item->crd = crd.value();
 
 			return true;
+		}
+
+		/**
+		 * Return typed item at postion i in UTCB
+		 *
+		 * \param i position of item requested, starts with 0
+		 */
+		Item * get_item(const unsigned i) {
+			if (i > (PAGE_SIZE_BYTE / sizeof(struct Item))) return 0;
+			Item * item = reinterpret_cast<Item *>(this) + (PAGE_SIZE_BYTE / sizeof(struct Item)) - i - 1;
+			if (reinterpret_cast<mword_t *>(item) < this->msg) return 0;
+			return item;
 		}
 
 		mword_t mtd_value() const { return static_cast<Mtd>(mtd).value(); }
@@ -457,7 +526,11 @@ namespace Nova {
 		PT_SEL_PAGE_FAULT = 0xe,
 		PT_SEL_PARENT     = 0x1a,  /* convention on Genode */
 		PT_SEL_STARTUP    = 0x1e,
+		PT_SEL_RECALL     = 0x1f,
 		PD_SEL            = 0x1b,
+		PD_SEL_CAP_LOCK   = 0x1c,  /* convention on Genode */
+		SM_SEL_EC_CLIENT  = 0x1c,  /* convention on Genode */
+		SM_SEL_EC         = 0x1d,  /* convention on Genode */
 	};
 
 }

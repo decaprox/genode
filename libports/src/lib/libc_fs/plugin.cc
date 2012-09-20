@@ -23,11 +23,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/mman.h>
 
 /* libc plugin interface */
 #include <libc-plugin/plugin.h>
 #include <libc-plugin/fd_alloc.h>
 
+/* libc-internal includes */
+#include <libc_mem_alloc.h>
 
 static bool const verbose = false;
 
@@ -288,6 +292,8 @@ class Plugin : public Libc::Plugin
 			return true;
 		}
 
+		bool supports_mmap() { return true; }
+
 		int chdir(const char *path)
 		{
 			if (*path != '/') {
@@ -316,6 +322,10 @@ class Plugin : public Libc::Plugin
 			}
 
 			file_system()->close(context(fd)->node_handle());
+
+			Genode::destroy(Genode::env()->heap(), context(fd));
+			Libc::file_descriptor_allocator()->free(fd);
+
 			return 0;
 		}
 
@@ -354,6 +364,25 @@ class Plugin : public Libc::Plugin
 		{
 			PDBG("not implemented");
 			return -1;
+		}
+
+		int ftruncate(Libc::File_descriptor *fd, ::off_t length)
+		{
+			File_system::Node_handle node_handle = context(fd)->node_handle();
+			File_system::File_handle &file_handle =
+			    static_cast<File_system::File_handle&>(node_handle);
+
+			try {
+				file_system()->truncate(file_handle, length);
+			} catch (File_system::Invalid_handle) {
+				errno = EINVAL;
+				return -1;
+			} catch (File_system::Permission_denied) {
+				errno = EPERM;
+				return -1;
+			}
+
+			return 0;
 		}
 
 		/*
@@ -499,22 +528,42 @@ class Plugin : public Libc::Plugin
 				 * Open directory that contains the file to be opened/created
 				 */
 				File_system::Dir_handle const dir_handle =
-				file_system()->dir(dir_path, false);
+				    file_system()->dir(dir_path, false);
 
 				Node_handle_guard guard(dir_handle);
+
+				File_system::File_handle handle;
 
 				/*
 				 * Open or create file
 				 */
 				bool const create = (flags & O_CREAT) != 0;
-				File_system::File_handle const handle =
-					file_system()->file(dir_handle, basename, mode, create);
+
+				bool opened = false;
+				while (!opened) {
+					try {
+						handle = file_system()->file(dir_handle, basename, mode, create);
+						opened = true;
+					} catch (File_system::Node_already_exists) {
+						if (flags & O_EXCL)
+							throw File_system::Node_already_exists();
+						/* try to open the existing file */
+						try {
+							handle = file_system()->file(dir_handle, basename, mode, false);
+							opened = true;
+						} catch (File_system::Lookup_failed) {
+							/* the file got deleted in the meantime */
+						}
+					}
+				}
 
 				Plugin_context *context = new (Genode::env()->heap())
 					Plugin_context(handle);
 
-				return Libc::file_descriptor_allocator()->alloc(this, context);
-
+				Libc::File_descriptor *fd = Libc::file_descriptor_allocator()->alloc(this, context);
+				if ((flags & O_TRUNC) && (ftruncate(fd, 0) == -1))
+					return 0;
+				return fd;
 			}
 			catch (File_system::Lookup_failed) {
 				PERR("open(%s) lookup failed", pathname); }
@@ -635,34 +684,74 @@ class Plugin : public Libc::Plugin
 
 				size_t curr_packet_size = Genode::min(remaining_count, max_packet_size);
 
-				/*
-				 * XXX handle 'Packet_alloc_failed' exception'
-				 */
-				File_system::Packet_descriptor
-					packet(source.alloc_packet(curr_packet_size),
-					       static_cast<File_system::Packet_ref *>(context(fd)),
-					       context(fd)->node_handle(),
-					       File_system::Packet_descriptor::WRITE,
-					       curr_packet_size,
-					       context(fd)->seek_offset());
+				try {
+					File_system::Packet_descriptor
+						packet(source.alloc_packet(curr_packet_size),
+							   static_cast<File_system::Packet_ref *>(context(fd)),
+							   context(fd)->node_handle(),
+							   File_system::Packet_descriptor::WRITE,
+							   curr_packet_size,
+							   context(fd)->seek_offset());
 
-				/* mark context as having an operation in flight */
-				context(fd)->in_flight = true;
+					/* mark context as having an operation in flight */
+					context(fd)->in_flight = true;
 
-				/* copy-in payload into packet */
-				memcpy(source.packet_content(packet), buf, curr_packet_size);
+					/* copy-in payload into packet */
+					memcpy(source.packet_content(packet), buf, curr_packet_size);
 
-				/* pass packet to server side */
-				source.submit_packet(packet);
+					/* pass packet to server side */
+					source.submit_packet(packet);
 
-				/* prepare next iteration */
-				context(fd)->advance_seek_offset(curr_packet_size);
-				buf = (void *)((Genode::addr_t)buf + curr_packet_size);
-				remaining_count -= curr_packet_size;
+					/* prepare next iteration */
+					context(fd)->advance_seek_offset(curr_packet_size);
+					buf = (void *)((Genode::addr_t)buf + curr_packet_size);
+					remaining_count -= curr_packet_size;
+				} catch (File_system::Session::Tx::Source::Packet_alloc_failed) {
+					do {
+						wait_for_acknowledgement(source);
+					} while (context(fd)->in_flight);
+				}
 			}
 
 			PDBG("write returns %zd", count);
 			return count;
+		}
+
+		void *mmap(void *addr_in, ::size_t length, int prot, int flags,
+		           Libc::File_descriptor *fd, ::off_t offset)
+		{
+			if (prot != PROT_READ) {
+				PERR("mmap for prot=%x not supported", prot);
+				errno = EACCES;
+				return (void *)-1;
+			}
+
+			if (addr_in != 0) {
+				PERR("mmap for predefined address not supported");
+				errno = EINVAL;
+				return (void *)-1;
+			}
+
+			void *addr = Libc::mem_alloc()->alloc(length, PAGE_SHIFT);
+			if (addr == (void *)-1) {
+				errno = ENOMEM;
+				return (void *)-1;
+			}
+
+			if (::pread(fd->libc_fd, addr, length, offset) < 0) {
+				PERR("mmap could not obtain file content");
+				::munmap(addr, length);
+				errno = EACCES;
+				return (void *)-1;
+			}
+
+			return addr;
+		}
+
+		int munmap(void *addr, ::size_t)
+		{
+			Libc::mem_alloc()->free(addr);
+			return 0;
 		}
 };
 

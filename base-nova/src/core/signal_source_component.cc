@@ -18,6 +18,7 @@
 
 /* core includes */
 #include <signal_session_component.h>
+#include <platform_pd.h>
 
 /* NOVA includes */
 #include <nova/syscalls.h>
@@ -40,7 +41,8 @@ void Signal_source_component::submit(Signal_context_component *context,
 		_signal_queue.enqueue(context);
 
 		/* wake up client */
-		Nova::sm_ctrl(_blocking_semaphore.dst(), Nova::SEMAPHORE_UP);
+		Nova::sm_ctrl(_blocking_semaphore.local_name(),
+		              Nova::SEMAPHORE_UP);
 	}
 }
 
@@ -64,10 +66,11 @@ Signal_source_component::Signal_source_component(Rpc_entrypoint *ep)
 : _entrypoint(ep)
 {
 	/* initialized blocking semaphore */
-	int sem_sel = cap_selector_allocator()->alloc();
-	int ret = Nova::create_sm(sem_sel, cap_selector_allocator()->pd_sel(), 0);
+	addr_t sem_sel = cap_selector_allocator()->alloc();
+	uint8_t ret = Nova::create_sm(sem_sel,
+	                              Platform_pd::pd_core_sel(), 0);
 	if (ret)
-		PERR("create_sm returned %d", ret);
+		PERR("create_sm returned %u", ret);
 
-	_blocking_semaphore = Native_capability(sem_sel, 0);
+	_blocking_semaphore = Native_capability(sem_sel);
 }

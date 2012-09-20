@@ -31,6 +31,8 @@
 #include <cpu_session_component.h>
 #include <child_policy.h>
 
+extern void (*cleanup_socket_descriptors)();
+
 namespace Noux {
 
 	/**
@@ -59,6 +61,18 @@ namespace Noux {
 	 * Return singleton instance of PID allocator
 	 */
 	Pid_allocator *pid_allocator();
+
+	/**
+	 * Return singleton instance of timeout scheduler
+	 */
+	class Timeout_scheduler;
+	Timeout_scheduler *timeout_scheduler();
+
+	/**
+	 * Return singleton instance of user information
+	 */
+	class User_info;
+	User_info *user_info();
 
 
 	class Child;
@@ -281,7 +295,7 @@ namespace Noux {
 			      Signal_receiver  *sig_rec,
 			      Dir_file_system  *root_dir,
 			      Args              const &args,
-			      char const       *env,
+			      Sysio::Env        const &env,
 			      char const       *pwd,
 			      Cap_session      *cap_session,
 			      Service_registry &parent_services,
@@ -326,6 +340,10 @@ namespace Noux {
 
 			~Child()
 			{
+				/* short-cut to close all remaining open sd's if the child exits */
+				if (cleanup_socket_descriptors)
+					cleanup_socket_descriptors();
+
 				_sig_rec->dissolve(&_execve_cleanup_dispatcher);
 				_sig_rec->dissolve(&_exit_dispatcher);
 

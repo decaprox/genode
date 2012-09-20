@@ -2,6 +2,7 @@
  * \brief  Platform interface implementation
  * \author Norman Feske
  * \author Sebastian Sumpf
+ * \author Alexander Boettcher
  * \date   2009-10-02
  */
 
@@ -16,6 +17,7 @@
 #include <base/printf.h>
 #include <base/sleep.h>
 #include <base/thread.h>
+#include <base/cap_sel_alloc.h>
 
 /* core includes */
 #include <core_parent.h>
@@ -62,7 +64,7 @@ extern unsigned _prog_img_beg, _prog_img_end;
 /**
  *  Capability selector of root PD
  */
-extern int __local_pd_sel;
+addr_t __core_pd_sel;
 
 /**
  * Preserve physical page for the exclusive (read-only) use by core
@@ -96,11 +98,11 @@ static void page_fault_handler()
 	Utcb *utcb = (Utcb *)CORE_PAGER_UTCB_ADDR;
 
 	addr_t pf_addr = utcb->qual[1];
-	addr_t pf_eip  = utcb->eip;
-	addr_t pf_esp  = utcb->esp;
+	addr_t pf_ip  = utcb->ip;
+	addr_t pf_sp  = utcb->sp;
 
 	printf("\nPAGE-FAULT IN CORE: ADDR %lx  IP %lx  SP %lx stack trace follows...\n",
-	       pf_addr, pf_eip, pf_esp);
+	       pf_addr, pf_ip, pf_sp);
 
 	/* dump stack trace */
 	struct Core_img
@@ -125,9 +127,9 @@ static void page_fault_handler()
 	};
 
 	int count = 1;
-	printf("  #%d %08lx %08lx\n", count++, pf_esp, pf_eip);
+	printf("  #%d %08lx %08lx\n", count++, pf_sp, pf_ip);
 
-	Core_img dump(pf_esp);
+	Core_img dump(pf_sp);
 	while (dump.ip_valid()) {
 		printf("  #%d %p %08lx\n", count++, dump.ip(), *dump.ip());
 		dump.next_ip();
@@ -140,7 +142,7 @@ static void page_fault_handler()
 static void init_core_page_fault_handler()
 {
 	/* create echo EC */
-	enum { 
+	enum {
 		STACK_SIZE = 4*1024,
 		CPU_NO     = 0,
 		GLOBAL     = false,
@@ -149,18 +151,19 @@ static void init_core_page_fault_handler()
 
 	static char stack[STACK_SIZE];
 
-	mword_t sp = (long)&stack[STACK_SIZE - sizeof(long)];
-	int ec_sel = cap_selector_allocator()->alloc();
+	addr_t sp = (addr_t)&stack[STACK_SIZE - sizeof(addr_t)];
+	addr_t ec_sel = cap_selector_allocator()->alloc();
 
-	int ret = create_ec(ec_sel, __local_pd_sel, CPU_NO, CORE_PAGER_UTCB_ADDR,
-	                    (mword_t)sp, EXC_BASE, GLOBAL);
+	uint8_t ret = create_ec(ec_sel, __core_pd_sel, CPU_NO,
+	                        CORE_PAGER_UTCB_ADDR, (addr_t)sp, EXC_BASE,
+	                        GLOBAL);
 	if (ret)
-		PDBG("create_ec returned %d", ret);
+		PDBG("create_ec returned %u", ret);
 
 	/* set up page-fault portal */
-	create_pt(PT_SEL_PAGE_FAULT, __local_pd_sel, ec_sel,
+	create_pt(PT_SEL_PAGE_FAULT, __core_pd_sel, ec_sel,
 	          Mtd(Mtd::QUAL | Mtd::ESP | Mtd::EIP),
-	          (mword_t)page_fault_handler);
+	          (addr_t)page_fault_handler);
 }
 
 
@@ -182,7 +185,11 @@ Platform::Platform() :
 	__first_free_cap_selector = hip->sel_exc + hip->sel_gsi + 3;
 
 	/* set core pd selector */
-	__local_pd_sel = hip->sel_exc;
+	__core_pd_sel = hip->sel_exc;
+
+	/* create lock used by capability allocator */
+	Nova::create_sm(Nova::PD_SEL_CAP_LOCK, __core_pd_sel, 1);
+	Nova::create_sm(Nova::SM_SEL_EC, __core_pd_sel, 0);
 
 	/* locally map the whole I/O port range */
 	enum { ORDER_64K = 16 };

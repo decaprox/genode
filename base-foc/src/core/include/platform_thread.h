@@ -46,9 +46,10 @@ namespace Genode {
 			Platform_pd  *_platform_pd;    /* protection domain thread
 			                                 is bound to */
 			Pager_object *_pager_obj;
+			unsigned      _prio;
 
 			void _create_thread(void);
-			void _finalize_construction(const char *name, unsigned prio);
+			void _finalize_construction(const char *name);
 			bool _in_syscall(Fiasco::l4_umword_t flags);
 
 		public:
@@ -124,6 +125,11 @@ namespace Genode {
 			 */
 			int state(Genode::Thread_state *state_dst);
 
+			/**
+			 * Set the executing CPU for this thread
+			 */
+			void affinity(unsigned cpu);
+
 
 			/************************
 			 ** Accessor functions **
@@ -139,7 +145,7 @@ namespace Genode {
 			 * Return identification of thread when faulting
 			 */
 			unsigned long pager_object_badge() {
-				return (unsigned long) _thread.local->kcap(); }
+				return (unsigned long) _thread.local.dst(); }
 
 
 			/*******************************

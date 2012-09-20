@@ -27,9 +27,13 @@
 #define LWIP_DHCP                   1  /* DHCP support */
 #define LWIP_SOCKET                 1  /* LwIP socket API */
 #define LWIP_COMPAT_SOCKETS         0  /* Libc compatibility layer */
+#define LWIP_COMPAT_MUTEX           1  /* use binary semaphore instead of mutex */
 #define LWIP_NETIF_API              1  /* Network interface API */
 #define LWIP_NETIF_LOOPBACK         1  /* Looping back to same address? */
 #define LWIP_HAVE_LOOPIF            1  /* 127.0.0.1 support ? */
+#define LWIP_STATS                  0  /* disable stating */
+#define LWIP_RCVBUF                 1  /* enable SO_RCVBUF */
+#define SO_REUSE                    1  /* enable SO_REUSE */
 
 #if LWIP_DHCP
 #define LWIP_NETIF_STATUS_CALLBACK  1  /* callback function used by DHCP init */
@@ -46,7 +50,26 @@
 #define TCPIP_MBOX_SIZE           128
 
 #define TCP_MSS                  1460
-#define TCP_SND_BUF     (2 * TCP_MSS)
+#define TCP_WND                     (32 * TCP_MSS)
+#define TCP_SND_BUF                 (128 * TCP_MSS)
+#define TCP_SND_QUEUELEN            ((32 * (TCP_SND_BUF) + (TCP_MSS - 1))/(TCP_MSS))
+
+#define RECV_BUFSIZE_DEFAULT        2147483647 /* this is actually INT_MAX, default value */
+
+#define PBUF_POOL_SIZE             32
+
+/*
+ * We reduce the maximum segment lifetime from one minute to one second to
+ * avoid queuing up PCBs in TIME-WAIT state. This is the state, PCBs end up
+ * after closing a TCP connection socket at the server side. The number of PCBs
+ * in this state is apparently not limited by the value of 'MEMP_NUM_TCP_PCB'.
+ * One allocation costs around 160 bytes. If clients connect to the server at a
+ * high rate, those allocations accumulate quickly and thereby may exhaust the
+ * memory of the server. By reducing the segment lifetime, PCBs in TIME-WAIT
+ * state are cleaned up from the 'tcp_tw_pcbs' queue in a more timely fashion
+ * (by 'tcp_slowtmr()').
+ */
+#define TCP_MSL 1000UL
 
 #define MEMP_NUM_SYS_TIMEOUT        8
 #define MEMP_NUM_TCP_PCB           64

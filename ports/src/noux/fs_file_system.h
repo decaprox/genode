@@ -410,13 +410,16 @@ namespace Noux {
 					::File_system::File_handle file = _fs.file(dir, file_name.base() + 1,
 					                                           mode, create);
 
-					return new (env()->heap()) Fs_vfs_handle(this, mode, file);
+					return new (env()->heap()) Fs_vfs_handle(this, sysio->open_in.mode, file);
 				}
 				catch (::File_system::Permission_denied) {
 					error = Sysio::OPEN_ERR_NO_PERM; }
 				catch (::File_system::Invalid_handle) {
 					error = Sysio::OPEN_ERR_NO_PERM; }
-				catch (::File_system::Lookup_failed) { }
+				catch (::File_system::Lookup_failed) {
+					error = Sysio::OPEN_ERR_UNACCESSIBLE; }
+				catch (::File_system::Node_already_exists) {
+					error = Sysio::OPEN_ERR_EXISTS; }
 
 				sysio->error.open = error;
 				return 0;
@@ -513,6 +516,27 @@ namespace Noux {
 				source.release_packet(packet);
 				return true;
 			}
+
+			bool ftruncate(Sysio *sysio, Vfs_handle *vfs_handle)
+			{
+				Fs_vfs_handle const *handle = static_cast<Fs_vfs_handle *>(vfs_handle);
+
+				Sysio::Ftruncate_error error;
+
+				try {
+					_fs.truncate(handle->file_handle(), sysio->ftruncate_in.length);
+					return true;
+				} catch (::File_system::Invalid_handle) {
+					/* should not happen */
+					error = Sysio::FTRUNCATE_ERR_NO_PERM;
+				} catch (::File_system::Permission_denied) {
+					error = Sysio::FTRUNCATE_ERR_NO_PERM;
+				}
+
+				sysio->error.ftruncate = error;
+				return false;
+			}
+
 	};
 }
 

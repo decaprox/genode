@@ -1,6 +1,7 @@
 /*
  * \brief  Lay back and relax
  * \author Norman Feske
+ * \author Alexander Boettcher
  * \date   2010-02-01
  */
 
@@ -15,19 +16,25 @@
 #define _INCLUDE__BASE__SLEEP_H_
 
 /* Genode includes */
-#include <base/cap_sel_alloc.h>
 #include <base/thread.h>
 
 /* NOVA includes */
 #include <nova/syscalls.h>
+#include <nova/util.h>
 
 namespace Genode {
 
 	__attribute__((noreturn)) inline void sleep_forever()
 	{
-		int sleep_sm_sel = cap_selector_allocator()->alloc();
-		Nova::create_sm(sleep_sm_sel, Cap_selector_allocator::pd_sel(), 0);
-		while (1) Nova::sm_ctrl(sleep_sm_sel, Nova::SEMAPHORE_DOWN);
+		using namespace Nova;
+
+		Thread_base *myself = Thread_base::myself();
+		addr_t sem = myself ? myself->tid().exc_pt_sel + SM_SEL_EC : SM_SEL_EC;
+
+		while (1) {
+			if (Nova::sm_ctrl(sem, SEMAPHORE_DOWNZERO))
+				nova_die();
+		}
 	}
 }
 

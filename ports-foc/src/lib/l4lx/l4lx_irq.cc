@@ -38,51 +38,6 @@ unsigned int l4lx_irq_max = l4x_nr_irqs();
 
 extern l4_kernel_info_t *l4lx_kinfo;
 
-void timer_irq_thread(void *data)
-{
-	l4_timeout_t                 to;
-	l4_kernel_clock_t            pint;
-	l4_utcb_t                   *u = l4_utcb();
-	struct l4x_irq_desc_private *p =
-		(struct l4x_irq_desc_private*) irq_get_chip_data(TIMER_IRQ);
-
-	pint = l4lx_kinfo->clock;
-	for (;;) {
-		pint += 1000000 / l4x_hz();
-
-		if (pint > l4lx_kinfo->clock) {
-			l4_rcv_timeout(l4_timeout_abs_u(pint, 1, u), &to);
-			l4_ipc_receive(L4_INVALID_CAP, u, to);
-		}
-
-		if (l4_error(l4_irq_trigger(p->irq_cap)) != -1)
-			PWRN("IRQ timer trigger failed\n");
-	}
-}
-
-
-static unsigned int startup_timer(struct l4x_irq_desc_private *p)
-{
-	char          name[15];
-	int           cpu = 0;//smp_processor_id();
-
-	unsigned long flags = 0;
-	l4x_irq_save(flags);
-
-	Genode::snprintf(name, sizeof(name), "timer.i%d", TIMER_IRQ);
-
-	static Genode::Native_capability timer_cap = L4lx::vcpu_connection()->alloc_irq();
-	p->irq_cap = timer_cap.dst();
-	p->cpu     = 0;
-
-	l4lx_thread_create(timer_irq_thread, cpu, 0, 0, 0, 0, 0, name);
-	l4x_irq_save(flags);
-
-	l4lx_irq_dev_enable(irq_get_irq_data(TIMER_IRQ));
-	return 1;
-}
-
-
 extern "C" {
 
 FASTCALL l4_cap_idx_t l4x_have_irqcap(int irqnum);
@@ -107,9 +62,6 @@ unsigned int l4lx_irq_dev_startup(struct irq_data *data)
 	if (DEBUG)
 		PDBG("irq=%d", irq);
 
-	if (irq == TIMER_IRQ)
-		return startup_timer(p);
-
 	/* First test whether a capability has been registered with
 	 * this IRQ number */
 	p->irq_cap = l4x_have_irqcap(irq);
@@ -117,6 +69,7 @@ unsigned int l4lx_irq_dev_startup(struct irq_data *data)
 		PERR("Invalid irq cap!");
 		return 0;
 	}
+
 	l4lx_irq_dev_enable(data);
 	return 1;
 }
@@ -198,8 +151,45 @@ void l4lx_irq_dev_unmask(struct irq_data *data)
 int l4lx_irq_dev_set_affinity(struct irq_data *data,
                         const struct cpumask *dest, bool force)
 {
-	NOT_IMPLEMENTED;
-	return 0;
+	struct l4x_irq_desc_private *p =
+		(struct l4x_irq_desc_private*) irq_get_chip_data(data->irq);;
+
+	if (!p->irq_cap)
+		return 0;
+
+	unsigned target_cpu = l4x_target_cpu(dest);
+
+	if ((int)target_cpu == -1)
+		return 1;
+	if (target_cpu == p->cpu)
+        return 0;
+
+	unsigned long flags;
+	l4x_migrate_lock(flags);
+
+	{
+		Linux::Irq_guard guard;
+		if (l4_error(l4_irq_detach(p->irq_cap)))
+			PWRN("%02d: Unable to detach from IRQ\n", data->irq);
+	}
+
+	l4x_cpumask_copy(data, dest);
+	p->cpu = target_cpu;
+	PDBG("switched irq %d to cpu %d", data->irq, target_cpu);
+
+	{
+		Linux::Irq_guard guard;
+		l4_msgtag_t ret = l4_irq_attach(p->irq_cap, data->irq << 2,
+		                                l4x_cpu_thread_get_cap(p->cpu));
+		if (l4_error(ret))
+			PWRN("Attach to irq %lx failed with error %ld!", p->irq_cap, l4_error(ret));
+	}
+
+	if (p->enabled)
+		l4_irq_unmask(p->irq_cap);
+
+	l4x_migrate_unlock(flags);
+    return 0;
 }
 
 

@@ -34,9 +34,14 @@
 #include <sys/dirent.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #include <termios.h>
+#include <pwd.h>
+#include <string.h>
 
+/* libc-internal includes */
+#include <libc_mem_alloc.h>
 
 enum { verbose = false };
 
@@ -89,6 +94,87 @@ enum { FS_BLOCK_SIZE = 1024 };
 /***********************************************
  ** Overrides of libc default implementations **
  ***********************************************/
+
+/**
+ * User information related functions
+ */
+extern "C" struct passwd *getpwuid(uid_t uid)
+{
+	static char name[Noux::Sysio::MAX_USERNAME_LEN];
+	static char shell[Noux::Sysio::MAX_SHELL_LEN];
+	static char home[Noux::Sysio::MAX_HOME_LEN];
+
+	static char *empty = strdup("");
+
+	static struct passwd pw = {
+		/* .pw_name    = */ name,
+		/* .pw_passwd  = */ empty,
+		/* .pw_uid     = */ 0,
+		/* .pw_gid     = */ 0,
+		/* .pw_change  = */ 0,
+		/* .pw_class   = */ empty,
+		/* .pw_gecos   = */ empty,
+		/* .pw_dir     = */ home,
+		/* .pw_shell   = */ shell,
+		/* .pw_expire  = */ 0,
+		/* .pw_fields  = */ 0
+	};
+
+	sysio()->userinfo_in.uid = uid;
+	sysio()->userinfo_in.request = Noux::Sysio::USERINFO_GET_ALL;
+
+	if (!noux()->syscall(Noux::Session::SYSCALL_USERINFO)) {
+		return (struct passwd *)0;
+	}
+
+	/* SYSCALL_USERINFO assures that strings are always '\0' terminated */
+	Genode::memcpy(name,  sysio()->userinfo_out.name,  sizeof (sysio()->userinfo_out.name));
+	Genode::memcpy(home,  sysio()->userinfo_out.home,  sizeof (sysio()->userinfo_out.home));
+	Genode::memcpy(shell, sysio()->userinfo_out.shell, sizeof (sysio()->userinfo_out.shell));
+
+	pw.pw_uid = sysio()->userinfo_out.uid;
+	pw.pw_gid = sysio()->userinfo_out.gid;
+
+	return &pw;
+}
+
+
+extern "C" uid_t getgid()
+{
+	sysio()->userinfo_in.request = Noux::Sysio::USERINFO_GET_GID;
+
+	if (!noux()->syscall(Noux::Session::SYSCALL_USERINFO))
+		return 0;
+
+	uid_t gid = sysio()->userinfo_out.gid;
+	return gid;
+}
+
+
+extern "C" uid_t getegid()
+{
+	return getgid();
+}
+
+
+extern "C" uid_t getuid()
+{
+	sysio()->userinfo_in.request = Noux::Sysio::USERINFO_GET_UID;
+
+	if (!noux()->syscall(Noux::Session::SYSCALL_USERINFO))
+		return 0;
+
+	uid_t uid = sysio()->userinfo_out.uid;
+	PDBG("getuid(): %d", uid);
+	return uid;
+}
+
+
+extern "C" uid_t geteuid()
+{
+	return getuid();
+}
+
 
 extern "C" int __getcwd(char *dst, Genode::size_t dst_size)
 {
@@ -156,7 +242,6 @@ static bool serialize_string_array(char const * const * array, char *dst, Genode
 			return false;
 
 		Genode::strncpy(dst, array[i], dst_len);
-
 		dst += curr_len;
 		dst_len -= curr_len;
 	}
@@ -268,17 +353,31 @@ extern "C" int select(int nfds, fd_set *readfds, fd_set *writefds,
 	int   *dst     = in_fds.array;
 	size_t dst_len = Noux::Sysio::Select_fds::MAX_FDS;
 
-	in_fds.num_rd = marshal_fds(readfds, nfds, dst, dst_len);
+	/**
+	 * These variables are used in max_fds_exceeded() calculation, so
+	 * they need to be proper initialized.
+	 */
+	in_fds.num_rd = 0;
+	in_fds.num_wr = 0;
+	in_fds.num_ex = 0;
 
-	dst     += in_fds.num_rd;
-	dst_len -= in_fds.num_rd;
+	if (readfds != NULL) {
+		in_fds.num_rd = marshal_fds(readfds, nfds, dst, dst_len);
 
-	in_fds.num_wr = marshal_fds(writefds, nfds, dst, dst_len);
+		dst     += in_fds.num_rd;
+		dst_len -= in_fds.num_rd;
+	}
 
-	dst     += in_fds.num_wr;
-	dst_len -= in_fds.num_wr;
+	if (writefds != NULL) {
+		in_fds.num_wr = marshal_fds(writefds, nfds, dst, dst_len);
 
-	in_fds.num_ex = marshal_fds(exceptfds, nfds, dst, dst_len);
+		dst     += in_fds.num_wr;
+		dst_len -= in_fds.num_wr;
+	}
+
+	if (exceptfds != NULL) {
+		in_fds.num_ex = marshal_fds(exceptfds, nfds, dst, dst_len);
+	}
 
 	if (in_fds.max_fds_exceeded()) {
 		errno = ENOMEM;
@@ -291,14 +390,6 @@ extern "C" int select(int nfds, fd_set *readfds, fd_set *writefds,
 	if (timeout) {
 		sysio()->select_in.timeout.sec  = timeout->tv_sec;
 		sysio()->select_in.timeout.usec = timeout->tv_usec;
-
-		if (!sysio()->select_in.timeout.zero()) {
-//			PDBG("timeout=%d,%d -> replaced by zero timeout",
-//			     (int)timeout->tv_sec, (int)timeout->tv_usec);
-
-			sysio()->select_in.timeout.sec  = 0;
-			sysio()->select_in.timeout.usec = 0;
-		}
 	} else {
 		sysio()->select_in.timeout.set_infinite();
 	}
@@ -320,17 +411,28 @@ extern "C" int select(int nfds, fd_set *readfds, fd_set *writefds,
 	Noux::Sysio::Select_fds &out_fds = sysio()->select_out.fds;
 
 	int *src = out_fds.array;
+	int total_fds = 0;
 
-	unmarshal_fds(src, out_fds.num_rd, readfds);
-	src += out_fds.num_rd;
+	if (readfds != NULL) {
+		unmarshal_fds(src, out_fds.num_rd, readfds);
+		src += out_fds.num_rd;
+		total_fds += out_fds.num_rd;
+	}
 
-	unmarshal_fds(src, out_fds.num_wr, writefds);
-	src += out_fds.num_wr;
+	if (writefds != NULL) {
+		unmarshal_fds(src, out_fds.num_wr, writefds);
+		src += out_fds.num_wr;
+		total_fds += out_fds.num_wr;
+	}
 
-	unmarshal_fds(src, out_fds.num_ex, exceptfds);
+	if (exceptfds != NULL) {
+		unmarshal_fds(src, out_fds.num_ex, exceptfds);
+		/* exceptfds are currently ignored */
+	}
 
-	return out_fds.total_fds();
+	return total_fds;
 }
+
 
 #include <setjmp.h>
 #include <base/platform_env.h>
@@ -457,9 +559,14 @@ extern "C" int clock_gettime(clockid_t clk_id, struct timespec *tp)
 extern "C" int gettimeofday(struct timeval *tv, struct timezone *tz)
 {
 	if (verbose)
-		PDBG("gettimeofdaye called - not implemented");
-	errno = EINVAL;
-	return -1;
+		PDBG("gettimeofday() called - not implemented");
+
+	if (tv) {
+		tv->tv_sec = 0;
+		tv->tv_usec = 0;
+	}
+
+	return 0;
 }
 
 
@@ -541,9 +648,7 @@ namespace {
 			bool supports_rename(const char *, const char *) { return true; }
 			bool supports_mkdir(const char *, mode_t)        { return true; }
 			bool supports_socket(int, int, int)              { return true; }
-			bool supports_freeaddrinfo(struct addrinfo *)    { return true; }
-			bool supports_getaddrinfo(const char *, const char *,
-						  struct addrinfo **)    { return true; }
+			bool supports_mmap()                             { return true; }
 
 			Libc::File_descriptor *open(char const *, int);
 			ssize_t write(Libc::File_descriptor *, const void *, ::size_t);
@@ -552,6 +657,7 @@ namespace {
 			int fstat(Libc::File_descriptor *, struct stat *);
 			int fsync(Libc::File_descriptor *);
 			int fstatfs(Libc::File_descriptor *, struct statfs *);
+			int ftruncate(Libc::File_descriptor *, ::off_t);
 			int fcntl(Libc::File_descriptor *, int, long);
 			ssize_t getdirentries(Libc::File_descriptor *, char *, ::size_t, ::off_t *);
 			::off_t lseek(Libc::File_descriptor *, ::off_t offset, int whence);
@@ -563,6 +669,9 @@ namespace {
 			int unlink(char const *path);
 			int rename(const char *oldpath, const char *newpath);
 			int mkdir(const char *path, mode_t mode);
+			void *mmap(void *addr, ::size_t length, int prot, int flags,
+			           Libc::File_descriptor *, ::off_t offset);
+			int munmap(void *addr, ::size_t length);
 
 			/* Network related functions */
 			Libc::File_descriptor *socket(int, int, int);
@@ -572,9 +681,6 @@ namespace {
 				 socklen_t);
 			int connect(Libc::File_descriptor *, const struct sockaddr *addr,
 				    socklen_t addrlen);
-			void freeaddrinfo(struct addrinfo *);
-			int getaddrinfo(const char *, const char *, const struct addrinfo *,
-					struct addrinfo **);
 			int getpeername(Libc::File_descriptor *, struct sockaddr *,
 					socklen_t *);
 			int listen(Libc::File_descriptor *, int);
@@ -607,23 +713,45 @@ namespace {
 			return 0;
 		}
 
-		if (flags & O_CREAT)
-			unlink(pathname);
-
-		Genode::strncpy(sysio()->open_in.path, pathname, sizeof(sysio()->open_in.path));
-		sysio()->open_in.mode = flags;
-
-		if (!noux()->syscall(Noux::Session::SYSCALL_OPEN)) {
-			/*
-			 * XXX  we should return meaningful errno values
-			 */
-			PDBG("ENOENT (sysio()->error.open=%d)", sysio()->error.open);
-			errno = ENOENT;
-			return 0;
+		bool opened = false;
+		while (!opened) {
+			Genode::strncpy(sysio()->open_in.path, pathname, sizeof(sysio()->open_in.path));
+			sysio()->open_in.mode = flags;
+			if (noux()->syscall(Noux::Session::SYSCALL_OPEN))
+				opened = true;
+			else
+				switch (sysio()->error.open) {
+					case Noux::Sysio::OPEN_ERR_UNACCESSIBLE:
+						if (!(flags & O_CREAT)) {
+							errno = ENOENT;
+							return 0;
+						}
+						/* O_CREAT is set, so try to create the file */
+						Genode::strncpy(sysio()->open_in.path, pathname, sizeof(sysio()->open_in.path));
+						sysio()->open_in.mode = flags | O_EXCL;
+						if (noux()->syscall(Noux::Session::SYSCALL_OPEN))
+							opened = true;
+						else
+							switch (sysio()->error.open) {
+								case Noux::Sysio::OPEN_ERR_EXISTS:
+									/* file has been created by someone else in the meantime */
+									break;
+								case Noux::Sysio::OPEN_ERR_NO_PERM: errno = EPERM;  return 0;
+								default:                            errno = ENOENT; return 0;
+							}
+						break;
+					case Noux::Sysio::OPEN_ERR_NO_PERM: errno = EPERM;  return 0;
+					case Noux::Sysio::OPEN_ERR_EXISTS:  errno = EEXIST; return 0;
+					default:                            errno = ENOENT; return 0;
+				}
 		}
 
 		Libc::Plugin_context *context = noux_context(sysio()->open_out.fd);
-		return Libc::file_descriptor_allocator()->alloc(this, context, sysio()->open_out.fd);
+		Libc::File_descriptor *fd =
+		    Libc::file_descriptor_allocator()->alloc(this, context, sysio()->open_out.fd);
+		if ((flags & O_TRUNC) && (ftruncate(fd, 0) == -1))
+			return 0;
+		return fd;
 	}
 
 
@@ -650,7 +778,18 @@ namespace {
 			Genode::memcpy(sysio()->write_in.chunk, src, curr_count);
 
 			if (!noux()->syscall(Noux::Session::SYSCALL_WRITE)) {
-				PERR("write error %d (fd %d)", sysio()->error.general, noux_fd(fd->context));
+				switch (sysio()->error.write) {
+				case Noux::Sysio::WRITE_ERR_AGAIN:       errno = EAGAIN;      break;
+				case Noux::Sysio::WRITE_ERR_WOULD_BLOCK: errno = EWOULDBLOCK; break;
+				case Noux::Sysio::WRITE_ERR_INVALID:     errno = EINVAL;      break;
+				case Noux::Sysio::WRITE_ERR_IO:          errno = EIO;         break;
+				default: 
+					if (sysio()->error.general == Noux::Sysio::ERR_FD_INVALID)
+						errno = EBADF;
+					else
+						errno = 0;
+					break;
+				}
 			}
 
 			count -= curr_count;
@@ -673,8 +812,18 @@ namespace {
 			sysio()->read_in.count = curr_count;
 
 			if (!noux()->syscall(Noux::Session::SYSCALL_READ)) {
-				PERR("read error");
-				/* XXX set errno */
+				switch (sysio()->error.read) {
+				case Noux::Sysio::READ_ERR_AGAIN:       errno = EAGAIN;      break;
+				case Noux::Sysio::READ_ERR_WOULD_BLOCK: errno = EWOULDBLOCK; break;
+				case Noux::Sysio::READ_ERR_INVALID:     errno = EINVAL;      break;
+				case Noux::Sysio::READ_ERR_IO:          errno = EIO;         break;
+				default:
+					if (sysio()->error.general == Noux::Sysio::ERR_FD_INVALID)
+						errno = EBADF;
+					else
+						errno = 0;
+					break;
+				}
 				return -1;
 			}
 
@@ -740,9 +889,18 @@ namespace {
 
 			break;
 
+		case FIONBIO:
+			{
+				if (verbose)
+					PDBG("FIONBIO - *argp=%d", *argp);
+
+				sysio()->ioctl_in.request = Noux::Sysio::Ioctl_in::OP_FIONBIO;
+				sysio()->ioctl_in.argp = argp ? *(int*)argp : 0;
+			}
+
 		default:
 
-			PWRN("unsupported ioctl (request=0x%x", request);
+			PWRN("unsupported ioctl (request=0x%x)", request);
 			break;
 		}
 
@@ -770,6 +928,9 @@ namespace {
 				winsize->ws_col = sysio()->ioctl_out.tiocgwinsz.columns;
 				return 0;
 			}
+
+		case FIONBIO:
+			return 0;
 
 		default:
 			return -1;
@@ -837,6 +998,21 @@ namespace {
 	}
 
 
+	int Plugin::ftruncate(Libc::File_descriptor *fd, ::off_t length)
+	{
+		sysio()->ftruncate_in.fd = noux_fd(fd->context);
+		sysio()->ftruncate_in.length = length;
+		if (!noux()->syscall(Noux::Session::SYSCALL_FTRUNCATE)) {
+			switch (sysio()->error.ftruncate) {
+				case Noux::Sysio::FTRUNCATE_ERR_NO_PERM: errno = EPERM; break;
+			}
+			return -1;
+		}
+
+		return 0;
+	}
+
+
 	int Plugin::fcntl(Libc::File_descriptor *fd, int cmd, long arg)
 	{
 		/* copy arguments to sysio */
@@ -884,6 +1060,12 @@ namespace {
 		case F_GETFL:
 			PINF("fcntl: F_GETFL for libc_fd=%d", fd->libc_fd);
 			sysio()->fcntl_in.cmd = Noux::Sysio::FCNTL_CMD_GET_FILE_STATUS_FLAGS;
+			break;
+
+		case F_SETFL:
+			PINF("fcntl: F_SETFL for libc_fd=%d", fd->libc_fd);
+			sysio()->fcntl_in.cmd      = Noux::Sysio::FCNTL_CMD_SET_FILE_STATUS_FLAGS;
+			sysio()->fcntl_in.long_arg = arg;
 			break;
 
 		default:
@@ -1051,6 +1233,42 @@ namespace {
 		return 0;
 	}
 
+	void *Plugin::mmap(void *addr_in, ::size_t length, int prot, int flags,
+	                   Libc::File_descriptor *fd, ::off_t offset)
+	{
+		if (prot != PROT_READ) {
+			PERR("mmap for prot=%x not supported", prot);
+			errno = EACCES;
+			return (void *)-1;
+		}
+
+		if (addr_in != 0) {
+			PERR("mmap for predefined address not supported");
+			errno = EINVAL;
+			return (void *)-1;
+		}
+
+		void *addr = Libc::mem_alloc()->alloc(length, PAGE_SHIFT);
+		if (addr == (void *)-1) {
+			errno = ENOMEM;
+			return (void *)-1;
+		}
+
+		if (::pread(fd->libc_fd, addr, length, offset) < 0) {
+			PERR("mmap could not obtain file content");
+			::munmap(addr, length);
+			errno = EACCES;
+			return (void *)-1;
+		}
+
+		return addr;
+	}
+
+	int Plugin::munmap(void *addr, ::size_t)
+	{
+		Libc::mem_alloc()->free(addr);
+		return 0;
+	}
 
 	Libc::File_descriptor *Plugin::socket(int domain, int type, int protocol)
 	{
@@ -1128,6 +1346,15 @@ namespace {
 		}
 
 		if (!noux()->syscall(Noux::Session::SYSCALL_ACCEPT)) {
+			switch (sysio()->error.accept) {
+			case Noux::Sysio::ACCEPT_ERR_AGAIN:         errno = EAGAIN;      break;
+			case Noux::Sysio::ACCEPT_ERR_NO_MEMORY:     errno = ENOMEM;      break;
+			case Noux::Sysio::ACCEPT_ERR_INVALID:       errno = EINVAL;      break;
+			case Noux::Sysio::ACCEPT_ERR_NOT_SUPPORTED: errno = EOPNOTSUPP;  break;
+			case Noux::Sysio::ACCEPT_ERR_WOULD_BLOCK:   errno = EWOULDBLOCK; break;
+			default:                                    errno = 0;           break;
+			}
+
 			return 0;
 		}
 
@@ -1137,7 +1364,6 @@ namespace {
 		Libc::Plugin_context *context = noux_context(sysio()->accept_out.fd);
 		return Libc::file_descriptor_allocator()->alloc(this, context,
 				sysio()->accept_out.fd);
-
 	}
 
 
@@ -1150,7 +1376,13 @@ namespace {
 		sysio()->bind_in.addrlen = addrlen;
 
 		if (!noux()->syscall(Noux::Session::SYSCALL_BIND)) {
-			errno = EACCES;
+			switch (sysio()->error.bind) {
+			case Noux::Sysio::BIND_ERR_ACCESS:      errno = EACCES;     break;
+			case Noux::Sysio::BIND_ERR_ADDR_IN_USE: errno = EADDRINUSE; break;
+			case Noux::Sysio::BIND_ERR_INVALID:     errno = EINVAL;     break;
+			case Noux::Sysio::BIND_ERR_NO_MEMORY:   errno = ENOMEM;     break;
+			default:                                errno = 0;          break;
+			}
 			return -1;
 		}
 
@@ -1167,117 +1399,18 @@ namespace {
 		sysio()->connect_in.addrlen = addrlen;
 
 		if (!noux()->syscall(Noux::Session::SYSCALL_CONNECT)) {
-			/* XXX errno */
+			switch (sysio()->error.connect) {
+			case Noux::Sysio::CONNECT_ERR_AGAIN:        errno = EAGAIN;      break;
+			case Noux::Sysio::CONNECT_ERR_ALREADY:      errno = EALREADY;    break;
+			case Noux::Sysio::CONNECT_ERR_ADDR_IN_USE:  errno = EADDRINUSE;  break;
+			case Noux::Sysio::CONNECT_ERR_IN_PROGRESS:  errno = EINPROGRESS; break;
+			case Noux::Sysio::CONNECT_ERR_IS_CONNECTED: errno = EISCONN;     break;
+			default:                                    errno = 0;           break;
+			}
 			return -1;
 		}
 
 		return 0;
-	}
-
-
-	void Plugin::freeaddrinfo(struct addrinfo *res)
-	{
-#if 0
-		struct addrinfo *next;
-
-		while (res) {
-			if (res->ai_addr) {
-				free(res->ai_addr);
-			}
-
-			if (res->ai_canonname) {
-				free(res->ai_canonname);
-			}
-
-			next = res->ai_next;
-			free(res);
-			res = next;
-		}
-#endif
-	}
-
-
-	int Plugin::getaddrinfo(const char *hostname, const char *servname,
-			const struct addrinfo *hints, struct addrinfo **res)
-	{
-#if 0
-		const char *service = NULL;
-		/**
-		 * We have to fetch the portnumber manually because lwip only
-		 * supports getting the service by portnumber. So we first check
-		 * if servname is already a ascii portnumber and if it is not we
-		 * call getservent(servername, NULL).
-		 */
-		char buf[6] = { 0 };
-		int port = atoi(servname);
-		if (port <= 0 || port > 0xffff) {
-			struct servent *se = getservbyname(servname, NULL);
-			if (se != NULL) {
-				port = htons(se->s_port);
-				snprintf(buf, 6, "%d", port);
-				service = buf;
-			}
-			else {
-				return -1;
-			}
-		}
-		else
-			service = servname;
-
-		size_t len = strlen(hostname);
-		len = min(len, 255);
-		memcpy(sysio()->getaddrinfo_in.hostname, hostname, len);
-		sysio()->getaddrinfo_in.hostname[len] = '\0';
-
-		len = strlen(service);
-		len = min(len, 255);
-		memcpy(sysio()->getaddrinfo_in.servname, service, len);
-		sysio()->getaddrinfo_in.servname[len] = '\0';
-
-		if (!noux()->syscall(Noux::Session::SYSCALL_GETADDRINFO))
-			return -1;
-
-		struct addrinfo *rp = 0, *result;
-		for (int i = 0; i < sysio()->getaddrinfo_out.addr_num; i++) {
-			if (!rp) {
-				rp = (struct addrinfo *)malloc(sizeof (struct addrinfo));
-				*res = rp;
-			}
-			else {
-				rp->ai_next = (struct addrinfo *)malloc(sizeof (struct addrinfo));
-				rp = rp->ai_next;
-			}
-
-			rp->ai_flags     = sysio()->getaddrinfo_in.res[i].addrinfo.ai_flags;
-			rp->ai_family    = sysio()->getaddrinfo_in.res[i].addrinfo.ai_family;
-			rp->ai_socktype  = sysio()->getaddrinfo_in.res[i].addrinfo.ai_socktype;
-			rp->ai_protocol  = sysio()->getaddrinfo_in.res[i].addrinfo.ai_protocol;
-			rp->ai_addrlen   = sysio()->getaddrinfo_in.res[i].addrinfo.ai_addrlen;
-
-			if (sysio()->getaddrinfo_in.res[i].ai_addr.sa_len != 0) {
-				rp->ai_addr = (struct sockaddr *)malloc(sizeof (struct sockaddr));
-				memcpy(rp->ai_addr, &sysio()->getaddrinfo_in.res[i].ai_addr, sizeo
-						f (struct sockaddr));
-			}
-			else
-				rp->ai_addr = 0;
-
-			if (sysio()->getaddrinfo_in.res[i].ai_canonname != 0) {
-				size_t len = strlen(sysio()->getaddrinfo_in.res[i].ai_canonname) +
-					1;
-
-				rp->ai_canonname = (char *)malloc(len);
-				strncpy(rp->ai_canonname, sysio()->getaddrinfo_in.res[i].ai_canonn
-						ame, len);
-			}
-			else
-				rp->ai_canonname = 0;
-
-			rp->ai_next = 0;
-		}
-#endif
-
-		return -1;
 	}
 
 
@@ -1306,7 +1439,11 @@ namespace {
 		sysio()->listen_in.backlog = backlog;
 
 		if (!noux()->syscall(Noux::Session::SYSCALL_LISTEN)) {
-			/* errno = EACCES; */
+			switch (sysio()->error.listen) {
+			case Noux::Sysio::LISTEN_ERR_ADDR_IN_USE:   errno = EADDRINUSE; break;
+			case Noux::Sysio::LISTEN_ERR_NOT_SUPPORTED: errno = EOPNOTSUPP; break;
+			default:                                    errno = 0;          break;
+			}
 			return -1;
 		}
 
@@ -1318,7 +1455,7 @@ namespace {
 	{
 		Genode::size_t sum_recv_count = 0;
 
-		while (len) {
+		while (len > 0) {
 			Genode::size_t curr_len =
 				Genode::min(len, sizeof(sysio()->recv_in.buf));
 
@@ -1326,15 +1463,22 @@ namespace {
 			sysio()->recv_in.len = curr_len;
 
 			if (!noux()->syscall(Noux::Session::SYSCALL_RECV)) {
-				/* XXX set errno */
+				switch (sysio()->error.recv) {
+				case Noux::Sysio::RECV_ERR_AGAIN:         errno = EAGAIN;      break;
+				case Noux::Sysio::RECV_ERR_WOULD_BLOCK:   errno = EWOULDBLOCK; break;
+				case Noux::Sysio::RECV_ERR_INVALID:       errno = EINVAL;      break;
+				case Noux::Sysio::RECV_ERR_NOT_CONNECTED: errno = ENOTCONN;    break;
+				default:                                  errno = 0;           break;
+				}
 				return -1;
 			}
 
-			Genode::memcpy(buf, sysio()->recv_in.buf, sysio()->recv_out.len);
+			Genode::memcpy((char *)buf + sum_recv_count,
+			               sysio()->recv_in.buf, sysio()->recv_out.len);
 
 			sum_recv_count += sysio()->recv_out.len;
 
-			if (sysio()->recv_out.len < sysio()->recv_in.len)
+			if (sysio()->recv_out.len < curr_len)
 				break;
 
 			if (sysio()->recv_out.len <= len)
@@ -1352,8 +1496,7 @@ namespace {
 	{
 		Genode::size_t sum_recvfrom_count = 0;
 
-
-		while (len) {
+		while (len > 0) {
 			Genode::size_t curr_len = Genode::min(len, sizeof(sysio()->recvfrom_in.buf));
 
 			sysio()->recv_in.fd = noux_fd(fd->context);
@@ -1365,7 +1508,13 @@ namespace {
 				sysio()->recvfrom_in.addrlen = *addrlen;
 
 			if (!noux()->syscall(Noux::Session::SYSCALL_RECVFROM)) {
-				/* XXX set errno */
+				switch (sysio()->error.recv) {
+				case Noux::Sysio::RECV_ERR_AGAIN:         errno = EAGAIN;      break;
+				case Noux::Sysio::RECV_ERR_WOULD_BLOCK:   errno = EWOULDBLOCK; break;
+				case Noux::Sysio::RECV_ERR_INVALID:       errno = EINVAL;      break;
+				case Noux::Sysio::RECV_ERR_NOT_CONNECTED: errno = ENOTCONN;    break;
+				default:                                  errno = 0;           break;
+				}
 				return -1;
 			}
 
@@ -1374,11 +1523,12 @@ namespace {
 					       sysio()->recvfrom_in.addrlen);
 
 
-			Genode::memcpy(buf, sysio()->recvfrom_in.buf, sysio()->recvfrom_out.len);
+			Genode::memcpy((char *)buf + sum_recvfrom_count,
+			               sysio()->recvfrom_in.buf, sysio()->recvfrom_out.len);
 
 			sum_recvfrom_count += sysio()->recvfrom_out.len;
 
-			if (sysio()->recvfrom_out.len < sysio()->recvfrom_in.len)
+			if (sysio()->recvfrom_out.len < curr_len)
 				break;
 
 			if (sysio()->recvfrom_out.len <= len)
@@ -1407,6 +1557,16 @@ namespace {
 
 			if (!noux()->syscall(Noux::Session::SYSCALL_SEND)) {
 				PERR("write error %d", sysio()->error.general);
+				switch (sysio()->error.send) {
+				case Noux::Sysio::SEND_ERR_AGAIN:            errno = EAGAIN;      break;
+				case Noux::Sysio::SEND_ERR_WOULD_BLOCK:      errno = EWOULDBLOCK; break;
+				case Noux::Sysio::SEND_ERR_CONNECTION_RESET: errno = ECONNRESET;  break;
+				case Noux::Sysio::SEND_ERR_INVALID:          errno = EINVAL;      break;
+				case Noux::Sysio::SEND_ERR_IS_CONNECTED:     errno = EISCONN;     break;
+				case Noux::Sysio::SEND_ERR_NO_MEMORY:        errno = ENOMEM;      break;
+				default:                                     errno = 0;           break;
+				}
+				/* return foo */
 			}
 
 			len -= curr_len;
@@ -1422,7 +1582,7 @@ namespace {
 		int const orig_count = len;
 
 		if (addrlen > sizeof (sysio()->sendto_in.dest_addr)) {
-			/* XXX errno */
+			errno = 0; /* XXX */
 			return -1;
 		}
 
@@ -1447,6 +1607,15 @@ namespace {
 			}
 
 			if (!noux()->syscall(Noux::Session::SYSCALL_SENDTO)) {
+				switch (sysio()->error.send) {
+				case Noux::Sysio::SEND_ERR_AGAIN:            errno = EAGAIN;      break;
+				case Noux::Sysio::SEND_ERR_WOULD_BLOCK:      errno = EWOULDBLOCK; break;
+				case Noux::Sysio::SEND_ERR_CONNECTION_RESET: errno = ECONNRESET;  break;
+				case Noux::Sysio::SEND_ERR_INVALID:          errno = EINVAL;      break;
+				case Noux::Sysio::SEND_ERR_IS_CONNECTED:     errno = EISCONN;     break;
+				case Noux::Sysio::SEND_ERR_NO_MEMORY:        errno = ENOMEM;      break;
+				default:                                     errno = 0;           break;
+				}
 				return -1;
 			}
 
@@ -1464,6 +1633,10 @@ namespace {
 		sysio()->shutdown_in.how = how;
 
 		if (!noux()->syscall(Noux::Session::SYSCALL_SHUTDOWN)) {
+			switch (sysio()->error.shutdown) {
+			case Noux::Sysio::SHUTDOWN_ERR_NOT_CONNECTED: errno = ENOTCONN; break;
+			default:                                      errno = 0;        break;
+			}
 			return -1;
 		}
 
@@ -1528,38 +1701,16 @@ void init_libc_noux(void)
 	Genode::Dataspace_capability env_ds = env_rom.dataspace();
 	char *env_string = (char *)Genode::env()->rm_session()->attach(env_ds);
 
-	enum { ENV_MAX_SIZE       = 4096,
-	       ENV_MAX_ENTRIES    =  128,
-	       ENV_KEY_MAX_SIZE   =  256,
-	       ENV_VALUE_MAX_SIZE = 1024 };
-
-	static char  env_buf[ENV_MAX_SIZE];
+	enum { ENV_MAX_ENTRIES =  128 };
 	static char *env_array[ENV_MAX_ENTRIES];
 
 	unsigned num_entries = 0;  /* index within 'env_array' */
-	Genode::size_t i     = 0;  /* index within 'env_buf' */
 
-	while ((num_entries < ENV_MAX_ENTRIES - 2) && (i < ENV_MAX_SIZE)) {
-
-		Genode::Arg arg = Genode::Arg_string::first_arg(env_string);
-		if (!arg.valid())
-			break;
-
-		char key_buf[ENV_KEY_MAX_SIZE],
-		     value_buf[ENV_VALUE_MAX_SIZE];
-
-		arg.key(key_buf, sizeof(key_buf));
-		arg.string(value_buf, sizeof(value_buf), "");
-
-		env_array[num_entries++] = env_buf + i;
-		Genode::snprintf(env_buf + i, ENV_MAX_SIZE - i,
-		                 "%s=%s", key_buf, value_buf);
-
-		i += Genode::strlen(env_buf + i) + 1;
-
-		/* remove processed arg from 'env_string' */
-		Genode::Arg_string::remove_arg(env_string, key_buf);
+	while (*env_string && (num_entries < ENV_MAX_ENTRIES - 1)) {
+		env_array[num_entries++] = env_string;
+		env_string += (strlen(env_string) + 1);
 	}
+	env_array[num_entries] = 0;
 
 	/* register list of environment variables at libc 'environ' pointer */
 	environ = env_array;
