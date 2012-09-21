@@ -5,7 +5,7 @@
 set build_components {
 	core init
 	drivers/timer drivers/framebuffer drivers/pci drivers/input
-	server/nitpicker
+	server/nitpicker server/ram_fs
 	test/tablemodel
 }
 
@@ -78,6 +78,13 @@ append config {
 		<resource name="RAM" quantum="1M"/>
 		<provides><service name="Nitpicker"/></provides>
 	</start>
+	<start name="ram_fs">
+		<resource name="RAM" quantum="100M"/>
+		<provides><service name="File_system"/></provides>
+		<config>
+			<policy label="" root="/" writeable="yes" />
+		</config>
+	</start>
 	<start name="tablemodel">
 		<resource name="RAM" quantum="100M"/>
 	</start>
@@ -94,12 +101,13 @@ set boot_modules {
 	core init
 	timer
 	nitpicker
+	ram_fs
 	ld.lib.so
 	libc.lib.so libm.lib.so
 	zlib.lib.so libpng.lib.so jpeg.lib.so
 	dejavusans.lib.so
 	freetype.lib.so
-	libc_lock_pipe.lib.so
+	libc_lock_pipe.lib.so libc_fs.lib.so
 	stdcxx.lib.so
 	qt_core.lib.so
 	qt_gui.lib.so

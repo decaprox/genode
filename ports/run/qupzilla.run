@@ -5,7 +5,7 @@
 set build_components {
 	core init
 	drivers/timer drivers/framebuffer drivers/pci drivers/input drivers/nic
-	server/nitpicker 
+	server/nitpicker server/ram_fs
 	app/qupzilla
 }
 
@@ -82,6 +82,13 @@ append config {
 		<resource name="RAM" quantum="1M"/>
 		<provides><service name="Nitpicker"/></provides>
 	</start>
+	<start name="ram_fs">
+		<resource name="RAM" quantum="100M"/>
+		<provides><service name="File_system"/></provides>
+		<config>
+			<policy label="" root="/" writeable="yes" />
+		</config>
+	</start>
 	<start name="qupzilla">
 		<resource name="RAM" quantum="2G"/>
 	</start>
@@ -97,6 +104,7 @@ install_config $config
 set boot_modules {
 	core init
 	timer nic_drv
+	ram_fs
 	nitpicker
 	qupzilla
 	ld.lib.so
@@ -104,7 +112,7 @@ set boot_modules {
 	zlib.lib.so libpng.lib.so jpeg.lib.so
 	dejavusans.lib.so
 	freetype.lib.so
-	libc_lock_pipe.lib.so
+	libc_lock_pipe.lib.so libc_fs.lib.so
 	libcrypto.lib.so libssl.lib.so
 	qt_core.lib.so
 	qt_gui.lib.so
@@ -113,6 +121,8 @@ set boot_modules {
 	qt_script.lib.so
 	qt_webcore.lib.so
 	qt_sql.lib.so
+	stdcxx.lib.so
+	sqlite3.lib.so
 }
 
 
