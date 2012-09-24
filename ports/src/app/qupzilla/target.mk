@@ -1,6 +1,4 @@
-$(warning qupzilla)
-
-QUPZILLA = QupZilla-1.3.1
+QUPZILLA = QupZilla-1.3.5
 
 # identify the qt4 repository by searching for a file that is unique for qt4
 QT4_REP_DIR := $(call select_from_repositories,lib/import/import-qt4.inc)
@@ -41,16 +39,20 @@ vpath % $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/history
 vpath % $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/navigation
 vpath % $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/navigation/completer
 vpath % $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/network
+vpath % $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/network/schemehandlers
 vpath % $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/opensearch
 vpath % $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/other
 vpath % $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/plugins
 vpath % $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/popupwindow
 vpath % $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/preferences
 vpath % $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/rss
+vpath % $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/session
 vpath % $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/sidebar
 vpath % $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/tools
 vpath % $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/webview
 vpath % $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/data
 
 -include $(QT4_REP_DIR)/src/app/tmpl/target_final.inc
+
+INC_DIR += $(INCLUDEPATH)
 

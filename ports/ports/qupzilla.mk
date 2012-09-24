@@ -1,4 +1,4 @@
-QIPZILLA     = QupZilla-1.3.1
+QIPZILLA     = QupZilla-1.3.5
 QUPZILLA_TGZ = $(QIPZILLA).tar.gz
 QIPZILLA_URL = https://github.com/downloads/QupZilla/qupzilla/$(QUPZILLA_TGZ)
 
@@ -17,6 +17,6 @@ $(DOWNLOAD_DIR)/$(QUPZILLA_TGZ):
 
 $(CONTRIB_DIR)/$(QIPZILLA): $(DOWNLOAD_DIR)/$(QUPZILLA_TGZ)
 	$(VERBOSE)tar xfz $< -C $(CONTRIB_DIR) && touch $@
+	$(VERBOSE)mkdir -p $(CONTRIB_DIR)/$(QIPZILLA)/src/lib/data/themes/default/
+	$(VERBOSE)cp -R  $(CONTRIB_DIR)/$(QIPZILLA)/bin/themes/default $(CONTRIB_DIR)/$(QIPZILLA)/src/lib/data/themes
 	$(VERBOSE)patch -d $@ -p1 -i ../../src/app/qupzilla/qupzilla_genode.patch
-	$(VERBOSE)cp src/app/qupzilla/themes/default/theme.png $(CONTRIB_DIR)/$(QIPZILLA)/src/lib/data/themes/default/
-	$(VERBOSE)cp -R src/app/qupzilla/themes/default/images $(CONTRIB_DIR)/$(QIPZILLA)/src/lib/data/themes/default/
