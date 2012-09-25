@@ -33,6 +33,8 @@
 #include <base/cap_sel_alloc.h>
 #include <base/thread.h>
 #include <base/rpc_server.h>
+#include <base/native_types.h>
+#include <util/misc_math.h>
 #include <rom_session/connection.h>
 #include <rm_session/connection.h>
 #include <cap_session/connection.h>
@@ -60,8 +62,9 @@ enum {
 };
 
 
-enum { verbose_npt = false };
-enum { verbose_io  = false };
+enum { verbose_debug = false };
+enum { verbose_npt   = false };
+enum { verbose_io    = false };
 
 
 /**
@@ -95,17 +98,10 @@ class Guest_memory
 		 * part of the address space, which contains the shadow of the VCPU's
 		 * physical memory.
 		 */
-		enum { RESERVATION_START = 0,
-		       RESERVATION_SIZE  = 0x10000000 };
-
 		Genode::Rm_connection _reservation;
 
-		/*
-		 * RAM used as backing store for guest-physical memory
-		 */
-		enum { DS_LOCAL_START = 0x20000000 };
-
 		Genode::Ram_dataspace_capability _ds;
+
 		char *_local_addr;
 
 	public:
@@ -133,21 +129,28 @@ class Guest_memory
 		 */
 		Guest_memory(Genode::size_t backing_store_size)
 		:
-			_reservation(RESERVATION_START, RESERVATION_SIZE),
+			_reservation(0, backing_store_size),
 			_ds(Genode::env()->ram_session()->alloc(backing_store_size)),
-			_local_addr(Genode::env()->rm_session()->attach_at(_ds, DS_LOCAL_START)),
+			_local_addr(0),
 			remaining_size(backing_store_size)
 		{
-			/*
-			 * Attach reservation to the beginning of the local address space.
-			 * We leave out the very first page because core denies the
-			 * attachment of anything at the zero page.
-			 */
-			Genode::env()->rm_session()->attach_at(_reservation.dataspace(),
-			                                       PAGE_SIZE, 0, PAGE_SIZE);
+			try {
 
-			Logging::printf("local base of guest-physical memory is 0x%p\n",
-			                backing_store_local_base());
+				/*
+				 * Attach reservation to the beginning of the local address space.
+				 * We leave out the very first page because core denies the
+				 * attachment of anything at the zero page.
+				 */
+				Genode::env()->rm_session()->attach_at(_reservation.dataspace(),
+				                                       PAGE_SIZE, 0, PAGE_SIZE);
+
+				/*
+				 * RAM used as backing store for guest-physical memory
+				 */
+				_local_addr = Genode::env()->rm_session()->attach(_ds);
+
+			} catch (Genode::Rm_session::Region_conflict) { }
+
 		}
 
 		~Guest_memory()
@@ -156,7 +159,7 @@ class Guest_memory
 			Genode::env()->rm_session()->detach((void *)PAGE_SIZE);
 
 			/* detach and free backing store */
-			Genode::env()->rm_session()->detach((void *)DS_LOCAL_START);
+			Genode::env()->rm_session()->detach((void *)_local_addr);
 			Genode::env()->ram_session()->free(_ds);
 		}
 
@@ -334,43 +337,105 @@ class Vcpu_dispatcher : public Genode::Thread<STACK_SIZE>,
 			msg.cpu->mtd = msg.mtr_out;
 		}
 
+  		/**
+		 * Get position of the least significant 1 bit.
+  		 * bsf is undefined for value == 0.
+		 */
+  		Genode::addr_t bsf(Genode::addr_t value) {
+			return __builtin_ctz(value); }
+
+		bool max_map_crd(Nova::Mem_crd &crd, Genode::addr_t vmm_start,
+		                 Genode::addr_t vm_start, Genode::addr_t size,
+		                 Genode::addr_t vm_fault)
+		{ 
+			Nova::Mem_crd crd_save = crd;
+
+			retry:
+
+			/* lookup whether page is mapped and its size */
+			Nova::uint8_t ret = Nova::lookup(crd);
+			if (ret != Nova::NOVA_OK)
+				return false;
+
+			/* page is not mapped, touch it */
+			if (crd.is_null()) {
+				crd = crd_save;
+				Genode::touch_read((unsigned char volatile *)crd.addr());
+				goto retry;
+			}
+
+			/* cut-set crd region and vmm region */
+			Genode::addr_t cut_start = Genode::max(vmm_start, crd.base());
+			Genode::addr_t cut_size  = Genode::min(vmm_start + size,
+			                           crd.base() + (1UL << crd.order())) -
+			                           cut_start;
+
+			/* calculate minimal order of page to be mapped */
+			Genode::addr_t map_page  = vmm_start + vm_fault - vm_start;
+			Genode::addr_t map_order = bsf(vm_fault | map_page | cut_size);
+
+			Genode::addr_t hotspot = 0;
+
+			/* calculate maximal aligned order of page to be mapped */
+			do {
+				crd = Nova::Mem_crd(map_page, map_order,
+					                Nova::Rights(true, true, true));
+
+				map_order += 1;
+				map_page  &= ~((1UL << map_order) - 1);
+				hotspot    = vm_start + map_page - vmm_start;
+			}
+			while (cut_start <= map_page &&
+			      ((map_page + (1UL << map_order)) <= (cut_start + cut_size)) &&
+			      !(hotspot & ((1UL << map_order) - 1)));
+			
+			return true;
+		}
+
 		bool _handle_map_memory(bool need_unmap)
 		{
 			Utcb *utcb = _utcb_of_myself();
-			Genode::addr_t const fault_addr = utcb->qual[1];
-
-			MessageMemRegion mem_region(fault_addr >> 12);
+			Genode::addr_t const vm_fault_addr = utcb->qual[1];
 
 			if (verbose_npt)
-				Logging::printf("--> request mapping at 0x%lx\n", fault_addr);
+				Logging::printf("--> request mapping at 0x%lx\n", vm_fault_addr);
 
-			if (!_motherboard.bus_memregion.send(mem_region, true) || !mem_region.ptr)
+			MessageMemRegion mem_region(vm_fault_addr >> PAGE_SIZE_LOG2);
+
+			if (!_motherboard.bus_memregion.send(mem_region, true) || 
+			    !mem_region.ptr)
 				return false;
 
 			if (verbose_npt)
-				Logging::printf("MemRegion: page=%lx, start_page=%lx, count=%lx, ptr=%p\n",
-				                mem_region.page, mem_region.start_page, mem_region.count, mem_region.ptr);
+				Logging::printf("VM page 0x%lx in [0x%lx:0x%lx),"
+				                " VMM area: [0x%lx:0x%lx)\n",
+				                mem_region.page, mem_region.start_page,
+				                mem_region.start_page + mem_region.count,
+				                (Genode::addr_t)mem_region.ptr >> PAGE_SIZE_LOG2,
+				                ((Genode::addr_t)mem_region.ptr >> PAGE_SIZE_LOG2)
+				                + mem_region.count);
 
-			Genode::addr_t src = (Genode::addr_t)_guest_memory.backing_store_local_base() +
-			                    (mem_region.page << PAGE_SIZE_LOG2);
-			Genode::touch_read((unsigned char volatile *)src);
+			Genode::addr_t vmm_memory_base =
+				reinterpret_cast<Genode::addr_t>(mem_region.ptr);
+			Genode::addr_t vmm_memory_fault = vmm_memory_base +
+				(vm_fault_addr - (mem_region.start_page << PAGE_SIZE_LOG2));
 
-			Nova::Mem_crd crd(src >> PAGE_SIZE_LOG2, 32 - PAGE_SIZE_LOG2,
+			Nova::Mem_crd crd(vmm_memory_fault >> PAGE_SIZE_LOG2, 0,
 			                  Nova::Rights(true, true, true));
 
-			Nova::uint8_t ret = Nova::lookup(crd);
-
-			if (verbose_npt)
-				Logging::printf("looked up crd (base=0x%lx, order=%ld)\n",
-				                crd.base(), crd.order());
+			if (!max_map_crd(crd, vmm_memory_base >> PAGE_SIZE_LOG2,
+			                 mem_region.start_page,
+			                 mem_region.count, mem_region.page))
+				Logging::panic("mapping failed");
 
 			if (need_unmap)
 				Logging::panic("_handle_map_memory: need_unmap not handled, yet\n");
 
-			Nova::mword_t hotspot = mem_region.page << 12;
+			Genode::addr_t hotspot = (mem_region.start_page << PAGE_SIZE_LOG2)
+			                         + crd.addr() - vmm_memory_base;
 
 			if (verbose_npt)
-				Logging::printf("NPT mapping (base=0x%lx, order=%d hotspot=0x%lx)\n",
+				Logging::printf("NPT mapping (base=0x%lx, order=%d, hotspot=0x%lx)\n",
 				                crd.base(), crd.order(), hotspot);
 
 			/* EPT violation during IDT vectoring? */
@@ -409,7 +474,7 @@ class Vcpu_dispatcher : public Genode::Thread<STACK_SIZE>,
 		void _svm_npt()
 		{
 			Utcb *utcb = _utcb_of_myself();
-			MessageMemRegion msg(utcb->qual[1] >> 12);
+			MessageMemRegion msg(utcb->qual[1] >> PAGE_SIZE_LOG2);
 			if (!_handle_map_memory(utcb->qual[0] & 1))
 				_svm_invalid();
 		}
@@ -515,8 +580,7 @@ class Vcpu_dispatcher : public Genode::Thread<STACK_SIZE>,
 		                Guest_memory           &guest_memory,
 		                Motherboard            &motherboard,
 		                Genode::Cap_connection &cap_session,
-		                bool                   has_svm,
-		                unsigned               cpu_number)
+		                bool                   has_svm)
 		:
 			_vcpu(vcpu),
 			_vcpu_thread("vCPU thread"),
@@ -667,7 +731,7 @@ class Machine : public StaticReceiver<Machine>
 		Clock                  _clock;
 		Motherboard            _motherboard;
 		TimeoutList<32, void>  _timeouts;
-		Guest_memory           _guest_memory;
+		Guest_memory          &_guest_memory;
 		Boot_module_provider  &_boot_modules;
 
 	public:
@@ -685,7 +749,8 @@ class Machine : public StaticReceiver<Machine>
 			 */
 			case MessageHostOp::OP_GUEST_MEM:
 
-				Logging::printf("OP_GUEST_MEM value=0x%lx\n", msg.value);
+				if (verbose_debug)
+					Logging::printf("OP_GUEST_MEM value=0x%lx\n", msg.value);
 
 				if (msg.value >= _guest_memory.remaining_size) {
 					msg.value = 0;
@@ -693,8 +758,9 @@ class Machine : public StaticReceiver<Machine>
 					msg.len = _guest_memory.remaining_size - msg.value;
 					msg.ptr = _guest_memory.backing_store_local_base() + msg.value;
 				}
-				Logging::printf(" -> len=0x%lx, ptr=0x%p\n",
-				                msg.len, msg.ptr);
+				if (verbose_debug)
+					Logging::printf(" -> len=0x%lx, ptr=0x%p\n",
+				    	            msg.len, msg.ptr);
 				return true;
 
 			/**
@@ -702,7 +768,8 @@ class Machine : public StaticReceiver<Machine>
 			 */
 			case MessageHostOp::OP_ALLOC_FROM_GUEST:
 
-				Logging::printf("OP_ALLOC_FROM_GUEST\n");
+				if (verbose_debug)
+					Logging::printf("OP_ALLOC_FROM_GUEST\n");
 
 				if (msg.value > _guest_memory.remaining_size)
 					return false;
@@ -711,22 +778,22 @@ class Machine : public StaticReceiver<Machine>
 
 				msg.phys = _guest_memory.remaining_size;
 
-				Logging::printf("-> allocated from guest %08lx+%lx\n",
-				                _guest_memory.remaining_size, msg.value);
+				if (verbose_debug)
+					Logging::printf("-> allocated from guest %08lx+%lx\n",
+					                _guest_memory.remaining_size, msg.value);
 				return true;
 
 			case MessageHostOp::OP_VCPU_CREATE_BACKEND:
 				{
-					Logging::printf("OP_VCPU_CREATE_BACKEND\n");
+					if (verbose_debug)
+						Logging::printf("OP_VCPU_CREATE_BACKEND\n");
 
 					static Genode::Cap_connection cap_session;
-					/*
-					 * XXX determine real CPU number, hardcoded CPU 0 for now
-					 */
-					enum { CPU_NUMBER = 0 };
+
 					Vcpu_dispatcher *vcpu_dispatcher =
-						new Vcpu_dispatcher(msg.vcpu, _guest_memory, _motherboard, cap_session,
-						                    _hip->has_svm(), CPU_NUMBER);
+						new Vcpu_dispatcher(msg.vcpu, _guest_memory,
+						                    _motherboard, cap_session,
+						                    _hip->has_svm());
 
 					msg.value = vcpu_dispatcher->sel_sm_ec();
 					return true;
@@ -734,7 +801,8 @@ class Machine : public StaticReceiver<Machine>
 
 			case MessageHostOp::OP_VCPU_RELEASE:
 
-				Logging::printf("OP_VCPU_RELEASE\n");
+				if (verbose_debug)
+					Logging::printf("OP_VCPU_RELEASE\n");
 
 				if (msg.len) {
 					if (Nova::sm_ctrl(msg.value, Nova::SEMAPHORE_UP) != 0) {
@@ -746,11 +814,13 @@ class Machine : public StaticReceiver<Machine>
 
 			case MessageHostOp::OP_VCPU_BLOCK:
 				{
-					Logging::printf("OP_VCPU_BLOCK\n");
+					if (verbose_debug)
+						Logging::printf("OP_VCPU_BLOCK\n");
 
 					global_lock.unlock();
 					bool res = (Nova::sm_ctrl(msg.value, Nova::SEMAPHORE_DOWN) == 0);
-					Logging::printf("woke up from vcpu sem, block on global_lock\n");
+					if (verbose_debug)
+						Logging::printf("woke up from vcpu sem, block on global_lock\n");
 					global_lock.lock();
 					return res;
 				}
@@ -777,7 +847,11 @@ class Machine : public StaticReceiver<Machine>
 					try {
 						data_len = _boot_modules.data(index, data_dst, dst_len);
 					} catch (Boot_module_provider::Destination_buffer_too_small) {
-						Logging::printf("could not load module, destination buffer too small\n");
+						Logging::panic("could not load module, destination buffer too small\n");
+						return false;
+					} catch (Boot_module_provider::Module_loading_failed) {
+						Logging::panic("could not load module %d,"
+						               " unknown reason\n", index);
 						return false;
 					}
 
@@ -828,13 +902,15 @@ class Machine : public StaticReceiver<Machine>
 
 		bool receive(MessageConsole &msg)
 		{
-			Logging::printf("MessageConsole\n");
+			if (verbose_debug)
+				Logging::printf("MessageConsole\n");
 			return true;
 		}
 
 		bool receive(MessageDisk &msg)
 		{
-			PDBG("MessageDisk");
+			if (verbose_debug)
+				PDBG("MessageDisk");
 			return false;
 		}
 
@@ -843,13 +919,15 @@ class Machine : public StaticReceiver<Machine>
 			switch (msg.type) {
 			case MessageTimer::TIMER_NEW:
 
-				Logging::printf("TIMER_NEW\n");
+				if (verbose_debug)
+					Logging::printf("TIMER_NEW\n");
 				msg.nr = _timeouts.alloc();
 				return true;
 
 			case MessageTimer::TIMER_REQUEST_TIMEOUT:
 
-				Logging::printf("TIMER_REQUEST_TIMEOUT\n");
+				if (verbose_debug)
+					Logging::printf("TIMER_REQUEST_TIMEOUT\n");
 				_timeouts.request(msg.nr, msg.abstime);
 				return true;
 
@@ -860,31 +938,36 @@ class Machine : public StaticReceiver<Machine>
 
 		bool receive(MessageTime &msg)
 		{
-			Logging::printf("MessageTime - not implemented\n");
+			if (verbose_debug)
+				Logging::printf("MessageTime - not implemented\n");
 			return false;
 		}
 
 		bool receive(MessageNetwork &msg)
-		{
-			PDBG("MessageNetwork");
+		{	
+			if (verbose_debug)
+				PDBG("MessageNetwork");
 			return false;
 		}
 
 		bool receive(MessageVirtualNet &msg)
 		{
-			PDBG("MessageVirtualNet");
+			if (verbose_debug)
+				PDBG("MessageVirtualNet");
 			return false;
 		}
 
 		bool receive(MessagePciConfig &msg)
 		{
-			PDBG("MessagePciConfig");
+			if (verbose_debug)
+				PDBG("MessagePciConfig");
 			return false;
 		}
 
 		bool receive(MessageAcpi &msg)
 		{
-			PDBG("MessageAcpi");
+			if (verbose_debug)
+				PDBG("MessageAcpi");
 			return false;
 		}
 
@@ -900,13 +983,13 @@ class Machine : public StaticReceiver<Machine>
 		/**
 		 * Constructor
 		 */
-		Machine(Boot_module_provider &boot_modules)
+		Machine(Boot_module_provider &boot_modules, Guest_memory &guest_memory)
 		:
 			_hip_rom("hypervisor_info_page"),
 			_hip(Genode::env()->rm_session()->attach(_hip_rom.dataspace())),
 			_clock(_hip->freq_tsc*1000),
 			_motherboard(&_clock, _hip),
-			_guest_memory(32*1024*1024 /* XXX hard-wired for now */),
+			_guest_memory(guest_memory),
 			_boot_modules(boot_modules)
 		{
 			_timeouts.init();
@@ -1037,17 +1120,72 @@ class Machine : public StaticReceiver<Machine>
 		}
 };
 
+extern unsigned long _prog_img_beg;  /* begin of program image (link address) */
+extern unsigned long _prog_img_end;  /* end of program image */
+
+namespace Genode {
+
+	Rm_session *env_context_area_rm_session();
+
+}
 
 int main(int argc, char **argv)
 {
-	Genode::printf("--- Vancouver VMM started ---\n");
+	Genode::printf("--- Vancouver VMM starting ---\n");
+
+	/**
+	 * XXX Invoke env_context_rm_session to make sure the virtual region of
+	 *     the context area is reserved at core. Typically this happens when
+	 *     the first time a thread is allocated.
+	 *     Unfortunately, beforehand the VMM tries to grab the same region for
+	 *     large VM sizes.
+	 */
+	Genode::env_context_area_rm_session();
+
+	/* request max available memory */
+	Genode::addr_t vm_size = Genode::env()->ram_session()->avail();
+	/* reserve some memory for the VMM */
+	vm_size -= 256 * 1024;
+	/* calculate max memory for the VM */
+	vm_size = vm_size & ~((1UL << PAGE_SIZE_LOG2) - 1);
+
+	static Guest_memory guest_memory(vm_size);
+
+	/* diagnostic messages */
+	Genode::printf("[0x%08lx, 0x%08lx) - %lu MiB - guest physical memory\n",
+	               0, vm_size, vm_size / 1024 / 1024);
+
+	if (guest_memory.backing_store_local_base())
+		Genode::printf("[0x%08p, 0x%08lx) - VMM local base of guest-physical"
+		               " memory\n", guest_memory.backing_store_local_base(),
+	    	           (Genode::addr_t)guest_memory.backing_store_local_base() +
+	        	       vm_size);
+
+	Genode::printf("[0x%08lx, 0x%08lx) - Genode thread context area\n", 
+	                Genode::Native_config::context_area_virtual_base(),
+	                Genode::Native_config::context_area_virtual_base() +
+	                Genode::Native_config::context_area_virtual_size());
+
+	Genode::printf("[0x%08lx, 0x%08lx) - VMM program image\n", 
+	               (Genode::addr_t)&_prog_img_beg,
+	               (Genode::addr_t)&_prog_img_end);
+
+	if (!guest_memory.backing_store_local_base()) {
+		Genode::printf("Not enough space (0x%lx) left for VMM, VM image"
+		               " to large\n", vm_size);
+		return 1;
+	}
+
+	Genode::printf("\n--- Setup VM ---\n");
 
 	static Boot_module_provider
 		boot_modules(Genode::config()->xml_node().sub_node("multiboot"));
 
-	static Machine machine(boot_modules);
+	static Machine machine(boot_modules, guest_memory);
 
 	machine.setup_devices(Genode::config()->xml_node().sub_node("machine"));
+
+	Genode::printf("\n--- Booting VM ---\n");
 
 	machine.boot();
 
