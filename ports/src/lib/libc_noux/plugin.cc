@@ -972,7 +972,7 @@ namespace {
 			return -1;
 		}
 
-		return 0;
+		return noux_fd(new_fd->context);
 	}
 
 
@@ -1034,7 +1034,7 @@ namespace {
 				 * Use new allocated number as name of file descriptor
 				 * duplicate.
 				 */
-				if (dup2(fd, new_fd)) {
+				if (dup2(fd, new_fd) == -1) {
 					PERR("Plugin::fcntl: dup2 unexpectedly failed");
 					errno = EINVAL;
 					return -1;
@@ -1152,7 +1152,7 @@ namespace {
 
 			case Noux::Sysio::ERR_FD_INVALID:
 				errno = EBADF;
-				PERR("dirent: ERR_FD_INVALID");
+				PERR("lseek: ERR_FD_INVALID");
 				return -1;
 
 			case Noux::Sysio::NUM_GENERAL_ERRORS: return -1;
