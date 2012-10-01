@@ -37,10 +37,7 @@ enum {
 	UART2_IRQ = 74 + 32,      /* UART 2 */
 	UART3_IRQ = 70 + 32,      /* UART 3 */
 
-	/**
-	 * UART baud rate configuration (precalculated)
-	*/
-	BAUD_115200 =  26,
+	NS16550_CLK = 48000000,
 };
 
 

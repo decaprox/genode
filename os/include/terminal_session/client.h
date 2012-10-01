@@ -114,6 +114,9 @@ namespace Terminal {
 			}
 
 			Genode::size_t io_buffer_size() const { return _io_buffer.size; }
+
+			bool set_baudrate(int baud) { return call<Rpc_set_baudrate>(baud); }
+
 	};
 }
 

@@ -47,18 +47,24 @@ int main(int argc, char **argv)
 				created[i] = 0;
 		}
 
-		Terminal::Driver *create(unsigned index,
+		Terminal::Driver *create(unsigned index, unsigned baudrate,
 								 Terminal::Char_avail_callback &callback)
 		{
 			if (index > UARTS_NUM)
 				throw Terminal::Driver_factory::Not_available();
+
+			if (baudrate == 0)
+			{
+				PDBG("Baudrate is not defined. Use default 115200");
+				baudrate = 115200;
+			}
 
 			Omap_uart_cfg *cfg  = &omap_uart_cfg[index];
 			Omap_uart     *uart =  created[index];
 
 			if (!uart) {
 				uart = new (env()->heap())
-					Omap_uart(cfg->mmio_base, cfg->mmio_size, cfg->irq_number, BAUD_115200, callback);
+					Omap_uart(cfg->mmio_base, cfg->mmio_size, cfg->irq_number, baudrate, callback);
 
 				/* update 'created' table */
 				created[index] = uart;

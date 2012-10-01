@@ -24,6 +24,8 @@
 #include <util/mmio.h>
 #include <timer_session/connection.h>
 
+#include <uart_defs.h>
+
 /* local includes */
 #include "terminal_driver.h"
 
@@ -44,8 +46,14 @@ private:
 		_uart.write<Uart::FCR>(0);
 	}
 
-	void _init_comport(unsigned baud)
+	void _init_comport(unsigned baudrate)
 	{
+		unsigned divisor = 16;
+		if (baudrate > 230400)
+			divisor = 13;
+
+		unsigned baud = NS16550_CLK/(baudrate * divisor);
+
 		_clear_fifos();
 		_uart.write<Uart::MCR>(Uart::MCR::RTS);
 
@@ -75,7 +83,10 @@ private:
 
 		_uart.write<Uart::LCR>(Uart::LCR::CHAR_LENGTH_8 | Uart::LCR::PARITY_DIS | Uart::LCR::NB_STOP_1);
 
-		_uart.write<Uart::MDR1>(0);
+		if (baudrate > 230400)
+			_uart.write<Uart::MDR1>(Uart::MDR1::UART13X);
+		else
+			_uart.write<Uart::MDR1>(Uart::MDR1::UART16X);
 	}
 
 	Terminal::Char_avail_callback &_char_avail_callback;
@@ -134,6 +145,12 @@ public:
 	char get_char()
 	{
 		return _uart.read<Uart::RHR>();
+	}
+
+	bool set_baudrate(int baud)
+	{
+		_init_comport(baud);
+		return true;
 	}
 };
 

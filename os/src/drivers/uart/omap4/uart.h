@@ -70,6 +70,7 @@ struct Uart : Genode::Mmio
 		enum {
 			DISABLE        = (7<<0),
 			UART16X        = (0<<0),
+			UART13X        = (3<<0),
 		};
 	};
 	struct MDR2   : Register<0x24, 8> {};
