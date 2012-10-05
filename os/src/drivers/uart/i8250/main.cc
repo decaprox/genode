@@ -65,7 +65,6 @@ int main(int argc, char **argv)
 		Terminal::Driver *create(unsigned index, unsigned baudrate,
 		                         Terminal::Char_avail_callback &callback)
 		{
-			PDBG("Setting baudrate is not supported yet. Use default 115200.");
 			/*
 			 * We assume the underlying kernel uses UART0 and, therefore, start at
 			 * index 1 for the user-level driver.
@@ -73,14 +72,19 @@ int main(int argc, char **argv)
 			if (index < 1 || index >= UART_NUM)
 				throw Terminal::Driver_factory::Not_available();
 
+			if (baudrate == 0)
+			{
+				PDBG("Baudrate is not defined. Use default 115200");
+				baudrate = 115200;
+			}
+
 			I8250 *uart =  created[index];
 
-			enum { BAUD = 115200 };
 
 			if (!uart) {
 				uart = new (env()->heap())
 				       I8250(io_port_base(index), irq_number(index),
-				             BAUD, callback);
+							 baudrate, callback);
 
 				/* update 'created' table */
 				created[index] = uart;

@@ -137,6 +137,12 @@ class I8250 : public Terminal::Driver, public Genode::Irq_handler
 		{
 			return _inb<TRB>();
 		}
+
+		bool set_baudrate(int baud)
+		{
+			_init_comport(baud);
+			return true;
+		}
 };
 
 #endif /* _I8250_H_ */
