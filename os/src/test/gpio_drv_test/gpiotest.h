@@ -13,6 +13,8 @@ class GpioTest
 
 public:
 	enum {
+		LED1_GPIO        = 7,
+		LED2_GPIO        = 8,
 		BUTTON_GPIO     = 121,
 		GPIO4_IRQ       = 32 + 32,
 	};
@@ -40,8 +42,6 @@ public:
 GpioTest::GpioTest()
 {
 	// initialize GPIO_121
-	_gpio.set_direction_input(BUTTON_GPIO);
-
 	_gpio.set_debouncing_time(BUTTON_GPIO, 31*100);
 	_gpio.set_debounce_enable(BUTTON_GPIO, 1);
 
@@ -58,6 +58,8 @@ bool GpioTest::polling_test()
 	printf("---------- Polling test ----------\n");
 
 	printf("\nPush and hold button...\n");
+	_gpio.set_dataout(LED1_GPIO, true);
+	_gpio.set_dataout(LED2_GPIO, false);
 
 	volatile int gpio_state;
 
@@ -66,6 +68,9 @@ bool GpioTest::polling_test()
 	} while (gpio_state);
 
 	printf("OK\n");
+
+	_gpio.set_dataout(LED1_GPIO, false);
+	_gpio.set_dataout(LED2_GPIO, true);
 
 	printf("\nRelease button...\n");
 	do {
@@ -84,6 +89,9 @@ bool GpioTest::irq_test()
 	_gpio.set_falling_detect(BUTTON_GPIO, 1);
 	_gpio.set_irq_enable(BUTTON_GPIO, 1);
 
+	_gpio.set_dataout(LED1_GPIO, true);
+	_gpio.set_dataout(LED2_GPIO, false);
+
 	printf("\nPush and hold button...\n");
 
 	wait_for_signal();
@@ -94,6 +102,9 @@ bool GpioTest::irq_test()
 	_gpio.set_falling_detect(BUTTON_GPIO, 0);
 	_gpio.set_rising_detect(BUTTON_GPIO, 1);
 	_gpio.set_irq_enable(BUTTON_GPIO, 1);
+
+	_gpio.set_dataout(LED1_GPIO, false);
+	_gpio.set_dataout(LED2_GPIO, true);
 
 	printf("\nRelease button...\n");
 
