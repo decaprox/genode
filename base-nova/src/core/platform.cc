@@ -34,6 +34,7 @@ using namespace Nova;
 
 enum { verbose_boot_info = true };
 
+Native_utcb *main_thread_utcb();
 
 /**
  * Initial value of esp register, saved by the crt0 startup code
@@ -44,15 +45,9 @@ extern long __initial_sp;
 
 
 /**
- * First available capability selector for custom use
- */
-extern int __first_free_cap_selector;
-
-
-/**
  * Pointer to the UTCB of the main thread
  */
-extern Utcb *__main_thread_utcb;
+Utcb *__main_thread_utcb;
 
 
 /**
@@ -181,9 +176,6 @@ Platform::Platform() :
 	/* register UTCB of main thread */
 	__main_thread_utcb = (Utcb *)(__initial_sp - get_page_size());
 
-	/* register start of usable capability range */
-	__first_free_cap_selector = hip->sel_exc + hip->sel_gsi + 3;
-
 	/* set core pd selector */
 	__core_pd_sel = hip->sel_exc;
 
@@ -198,6 +190,12 @@ Platform::Platform() :
 	/*
 	 * Now that we can access the I/O ports for comport 0, printf works...
 	 */
+
+	/* sanity checks */
+	if (hip->sel_exc + 3 > NUM_INITIAL_PT_RESERVED) {
+		printf("configuration error\n");
+		nova_die();
+	}
 
 	/* configure virtual address spaces */
 	_vm_base = get_page_size();
@@ -383,6 +381,13 @@ Platform::Platform() :
 	/* IRQ allocator */
 	_irq_alloc.add_range(0, hip->sel_gsi - 1);
 	_gsi_base_sel = (hip->mem_desc_offset - hip->cpu_desc_offset) / hip->cpu_desc_size;
+
+	/* remap main utcb to default utbc address */
+	if (map_local(__main_thread_utcb, (addr_t)__main_thread_utcb,
+	              (addr_t)main_thread_utcb(), 1)) {
+		PERR("could not remap main threads utcb");
+		nova_die();
+	}
 
 	if (verbose_boot_info) {
 		printf(":virt_alloc: "); _core_mem_alloc.virt_alloc()->raw()->dump_addr_tree();

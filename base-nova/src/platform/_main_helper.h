@@ -16,36 +16,7 @@
 #define _PLATFORM___MAIN_HELPER_H_
 
 #include <nova/syscalls.h>
-#include <base/stdint.h>
 
-/**
- * Location of the main thread's UTCB, initialized by the startup code
- */
-extern Nova::mword_t __main_thread_utcb;
-
-/**
- * Initial value of esp register, saved by the crt0 startup code
- *
- * This value contains the address of the hypervisor information page.
- */
-extern long __initial_sp;
-
-/**
- * First available capability selector for custom use
- */
-extern int __first_free_cap_selector;
-
-static void main_thread_bootstrap()
-{
-	/* register UTCB of main thread */
-	__main_thread_utcb = __initial_sp - Nova::PAGE_SIZE_BYTE;
-
-	/* register start of usable capability range */
-	enum { FIRST_FREE_PORTAL = 0x1000 };
-
-	/* this variable may be set by the dynamic linker (ldso) */
-	if (!__first_free_cap_selector)
-		__first_free_cap_selector = FIRST_FREE_PORTAL;
-}
+static void main_thread_bootstrap() {};
 
 #endif /* _PLATFORM___MAIN_HELPER_H_ */
