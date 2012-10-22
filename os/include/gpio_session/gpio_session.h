@@ -21,6 +21,8 @@
 
 namespace Gpio {
 
+	using namespace Genode;
+
 	struct Session : Genode::Session
 	{
 		static const char *service_name() { return "Gpio"; }
@@ -55,11 +57,21 @@ namespace Gpio {
 		GENODE_RPC(Rpc_set_irq_enable,       void, set_irq_enable,       int, bool);
 		GENODE_RPC(Rpc_register_signal,      void, register_signal,      Genode::Signal_context_capability, int);
 		GENODE_RPC(Rpc_unregister_signal,    void, unregister_signal,    int);
-		GENODE_RPC_INTERFACE(Rpc_set_direction_output, Rpc_set_direction_input, Rpc_set_dataout,
-			Rpc_get_datain, Rpc_set_debounce_enable, Rpc_set_debouncing_time,
-			Rpc_set_falling_detect, Rpc_set_rising_detect, Rpc_set_irq_enable,
-			Rpc_register_signal, Rpc_unregister_signal
-		);
+
+
+		typedef Meta::Type_tuple<Rpc_set_direction_output,
+				Meta::Type_tuple<Rpc_set_direction_input,
+				Meta::Type_tuple<Rpc_set_dataout,
+				Meta::Type_tuple<Rpc_get_datain,
+				Meta::Type_tuple<Rpc_set_debounce_enable,
+				Meta::Type_tuple<Rpc_set_debouncing_time,
+				Meta::Type_tuple<Rpc_set_falling_detect,
+				Meta::Type_tuple<Rpc_set_rising_detect,
+				Meta::Type_tuple<Rpc_set_irq_enable,
+				Meta::Type_tuple<Rpc_register_signal,
+				Meta::Type_tuple<Rpc_unregister_signal,
+								Meta::Empty>
+				> > > > > > > > > > Rpc_functions;
 	};
 }
 
