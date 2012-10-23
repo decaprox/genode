@@ -13,6 +13,14 @@
  */
 
 /**
+ * Invalidate all entries of the branch predictor array
+ */
+.macro _flush_branch_predictor
+	mcr p15, 0, sp, c7, c5, 6
+	isb
+.endm
+
+/**
  * Switch from an interrupted user context to a kernel context
  *
  * \param exception_type  immediate exception type ID
@@ -37,10 +45,11 @@
 	 ** so we must avoid access to kernel memory   **
 	 ************************************************/
 
-	/* load kernel contextidr */
+	/* load kernel cidr */
 	adr sp, _mt_kernel_context_begin
 	ldr sp, [sp, #18*4]
 	mcr p15, 0, sp, c13, c0, 1
+	_flush_branch_predictor
 
 	/* load kernel section table */
 	adr sp, _mt_kernel_context_begin
@@ -54,7 +63,7 @@
 	 *******************************************/
 
 	/* get user context pointer */
-	ldr sp, _mt_context_ptr
+	ldr sp, _mt_user_context_ptr
 
 	/*
 	 * Save user r0 ... r12. We explicitely target user registers
@@ -105,7 +114,7 @@
 .macro _kernel_to_user_pic
 
 	/* get user context pointer */
-	ldr lr, _mt_context_ptr
+	ldr lr, _mt_user_context_ptr
 
 	/* buffer user pc */
 	ldr r0, [lr, #15*4]
@@ -154,7 +163,7 @@
 	orr   r8, #64
 	msr   spsr, r8
 	subs  pc, lr, #4  /* resume previous exception            */
-1:
+	1:
 .endm /* _fiq_check_prior_mode */
 
 /**
@@ -168,14 +177,14 @@
 
 
 /**
- * Switch from an interrupted vm to the kernel context
+ * Switch from an interrupted VM to the kernel context
  *
  * \param exception_type  immediate exception type ID
  * \param pc_adjust       immediate value that gets subtracted from the
  *                        vm's PC before it gets saved
  */
 .macro _vm_to_kernel exception_type, pc_adjust
-	ldr   sp, _mt_context_ptr          /* load context pointer            */
+	ldr   sp, _mt_user_context_ptr          /* load context pointer            */
 	stmia sp, {r0-lr}^                 /* save user regs r0-r12,sp,lr     */
 	add   r0, sp, #15*4
 	.if \pc_adjust != 0                /* adjust pc if necessary          */
@@ -211,10 +220,10 @@
 
 
 /**
- * Switch from kernel context to a vm
+ * Switch from kernel context to a VM
  */
 .macro _kernel_to_vm
-	ldr   r0, _mt_context_ptr   /* get vm context pointer               */
+	ldr   r0, _mt_user_context_ptr   /* get vm context pointer               */
 	add   r0, r0, #18*4         /* add offset of banked modes           */
 	_restore_bank 27            /* load undefined banks                 */
 	_restore_bank 19            /* load supervisor banks                */
@@ -223,7 +232,7 @@
 	_restore_bank 17            /* load fiq banks                       */
 	ldmia r0!, {r8 - r12}       /* load fiq r8-r12                      */
 	cps   #22                   /* switch to monitor mode               */
-	ldr   sp, _mt_context_ptr   /* get vm context pointer               */
+	ldr   sp, _mt_user_context_ptr   /* get vm context pointer               */
 	ldmia sp, {r0-lr}^          /* load user r0-r12,sp,lr               */
 	ldr   lr, [sp, #16*4]       /* load vm's cpsr to lr                 */
 	msr   spsr_cxfs, lr         /* save cpsr to be load when switching  */
@@ -254,23 +263,23 @@
 		.global _mt_kernel_entry_pic
 		_mt_kernel_entry_pic:
 
-			b _rst_entry              /* reset                  */
-			b _und_entry              /* undefined instruction  */
-			b _svc_entry              /* supervisor call        */
-			b _pab_entry              /* prefetch abort         */
-			b _dab_entry              /* data abort             */
-			nop                       /* reserved               */
-			b _irq_entry              /* interrupt request      */
-			_fiq_check_prior_mode     /* fast interrupt request */
-			_user_to_kernel_pic 6, 4
+			b _rst_entry              /* 0x00: reset                  */
+			b _und_entry              /* 0x04: undefined instruction  */
+			b _svc_entry              /* 0x08: supervisor call        */
+			b _pab_entry              /* 0x0c: prefetch abort         */
+			b _dab_entry              /* 0x10: data abort             */
+			nop                       /* 0x14: reserved               */
+			b _irq_entry              /* 0x18: interrupt request      */
+			_fiq_check_prior_mode     /* 0x1c: fast interrupt request */
+			_user_to_kernel_pic 7, 4
 
 			/* PICs that switch from an user exception to the kernel */
-			_rst_entry: _user_to_kernel_pic 0, 0
-			_und_entry: _user_to_kernel_pic 1, 4
-			_svc_entry: _user_to_kernel_pic 2, 0
-			_pab_entry: _user_to_kernel_pic 3, 4
-			_dab_entry: _user_to_kernel_pic 4, 8
-			_irq_entry: _user_to_kernel_pic 5, 4
+			_rst_entry: _user_to_kernel_pic 1, 0
+			_und_entry: _user_to_kernel_pic 2, 4
+			_svc_entry: _user_to_kernel_pic 3, 0
+			_pab_entry: _user_to_kernel_pic 4, 4
+			_dab_entry: _user_to_kernel_pic 5, 8
+			_irq_entry: _user_to_kernel_pic 6, 4
 
 		/* kernel must jump to this point to switch to a user context */
 		.p2align 2
@@ -287,8 +296,8 @@
 
 		/* pointer to the context backup space */
 		.p2align 2
-		.global _mt_context_ptr
-		_mt_context_ptr: .long 0
+		.global _mt_user_context_ptr
+		_mt_user_context_ptr: .long 0
 
 		/* a local word-sized buffer */
 		.p2align 2
@@ -302,7 +311,7 @@
 	 * On vm exceptions the CPU has to jump to one of the following
 	 * 7 entry vectors to switch to a kernel context.
 	 */
-	.p2align 2
+	.p2align 4
 	.global _mon_kernel_entry
 	_mon_kernel_entry:
 		b _mon_rst_entry    /* reset                  */
@@ -312,15 +321,15 @@
 		b _mon_dab_entry    /* data abort             */
 		nop                 /* reserved               */
 		b _mon_irq_entry    /* interrupt request      */
-		_vm_to_kernel 6, 4  /* fast interrupt request */
+		_vm_to_kernel 7, 4  /* fast interrupt request */
 
 		/* PICs that switch from a vm exception to the kernel */
-		_mon_rst_entry: _vm_to_kernel 0, 0
-		_mon_und_entry: _vm_to_kernel 1, 4
-		_mon_svc_entry: _vm_to_kernel 2, 0
-		_mon_pab_entry: _vm_to_kernel 3, 4
-		_mon_dab_entry: _vm_to_kernel 4, 8
-		_mon_irq_entry: _vm_to_kernel 5, 4
+		_mon_rst_entry: _vm_to_kernel 1, 0
+		_mon_und_entry: _vm_to_kernel 2, 4
+		_mon_svc_entry: _vm_to_kernel 3, 0
+		_mon_pab_entry: _vm_to_kernel 4, 4
+		_mon_dab_entry: _vm_to_kernel 5, 8
+		_mon_irq_entry: _vm_to_kernel 6, 4
 
 	/* kernel must jump to this point to switch to a vm */
 	.p2align 2

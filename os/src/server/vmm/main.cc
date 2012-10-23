@@ -78,7 +78,7 @@ namespace Genode {
 
 				/* setup ELF object and read program entry pointer */
 				Elf_binary elf((addr_t)elf_addr);
-				_state->ip = elf.entry();
+				_state->instruction_ptr(elf.entry());
 				if (!elf.valid()) {
 					PWRN("Invalid elf binary!");
 					return;
@@ -169,11 +169,11 @@ namespace Genode {
 
 				printf("Cpu state:\n");
 				for (unsigned i = 0; i<13; i++)
-					printf("  r%x        = %08lx\n", i, _state->r[i]);
-				printf("  sp        = %08lx\n", _state->sp);
-				printf("  lr        = %08lx\n", _state->lr);
-				printf("  ip        = %08lx\n", _state->ip);
-				printf("  cpsr      = %08lx\n", _state->cpsr);
+				printf("  r%x       = %08x\n", i, _state->r[i]);
+				printf("  sp        = %08x\n", _state->stack_ptr());
+				printf("  lr        = %08x\n", _state->return_ptr());
+				printf("  ip        = %08x\n", _state->instruction_ptr());
+				printf("  cpsr      = %08x\n", _state->cpsr);
 				for (unsigned i = 0;
 				     i < Cpu_state_modes::Mode_state::MAX; i++) {
 					printf("  sp_%s    = %08lx\n", modes[i], _state->mode[i].sp);
