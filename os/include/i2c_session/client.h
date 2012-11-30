@@ -1,7 +1,8 @@
 /*
  * \brief  Client-side i2c interface
  * \author Alexander Tarasikov <alexander.tarasikov@gmail.com>
- * \date   2012-09-18
+ * \author Nikolay Golikov
+ * \date   2012-11-30
  */
 
 /*
@@ -16,26 +17,73 @@
 #define _INCLUDE__I2C_SESSION__CLIENT_H_
 
 #include <i2c_session/capability.h>
+#include <dataspace/capability.h>
 #include <base/rpc_client.h>
+#include <base/env.h>
+
 
 namespace I2C {
-
-	struct Session_client : Genode::Rpc_client<Session>
+	
+	class Session_client : public Genode::Rpc_client<Session>
 	{
-		explicit Session_client(Session_capability session)
-		: Genode::Rpc_client<Session>(session) { }
+		private:
+			struct Io_buffer
+			{
+				Genode::Dataspace_capability ds_cap;
+				char						*base;
+				Genode::size_t			   size;
+	
+				Io_buffer(Genode::Dataspace_capability ds_cap)
+				:
+					ds_cap(ds_cap),
+					base(Genode::env()->rm_session()->attach(ds_cap)),
+					size(ds_cap.call<Genode::Dataspace::Rpc_size>())
+				{ }
+	
+				~Io_buffer()
+				{
+					Genode::env()->rm_session()->detach(base);
+				}
+			};
+	
+			Io_buffer _io_buffer;
 
-		bool read_byte(Genode::uint8_t address, Genode::uint8_t reg,
-			Genode::uint8_t *out)
-		{
-			return call<Rpc_read_byte>(address, reg, out);
-		}
+		public:
+			explicit Session_client(Session_capability session)
+			: 
+				Genode::Rpc_client<Session>(session),
+				_io_buffer(call<Rpc_dataspace>())
+			{ }
+    
+			bool read_byte(Genode::uint8_t address, Genode::uint8_t reg,
+				Genode::uint8_t *out)
+			{
+				return call<Rpc_read_byte>(address, reg, out);
+			}
+    
+			bool write_byte(Genode::uint8_t address, Genode::uint8_t reg,
+				Genode::uint8_t in)
+			{
+				return call<Rpc_write_byte>(address, reg, in);
+			}
+    
+			bool read(Genode::uint8_t address, Genode::uint8_t reg,
+				Genode::uint8_t ralen, Genode::uint8_t *out, Genode::uint8_t len)
+			{
+				bool res = call<Rpc_read>(address, reg, ralen, out, len);
+				Genode::memcpy(out, _io_buffer.base, len);
 
-		bool write_byte(Genode::uint8_t address, Genode::uint8_t reg,
-			Genode::uint8_t in)
-		{
-			return call<Rpc_write_byte>(address, reg, in);
-		}
+				return res;
+			}
+    
+			bool write(Genode::uint8_t address, Genode::uint8_t reg,
+				Genode::uint8_t ralen, Genode::uint8_t *in, Genode::uint8_t len)
+			{
+				Genode::memcpy(_io_buffer.base, in, len);
+				
+				return call<Rpc_write>(address, reg, ralen, in, len);
+			}
+
 	};
 }
 
