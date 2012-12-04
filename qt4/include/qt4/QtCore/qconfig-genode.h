@@ -280,6 +280,9 @@
 #ifndef QT_NO_NETWORKINTERFACE
 #  define QT_NO_NETWORKINTERFACE
 #endif
+#ifndef QT_OPENSSL
+#  define QT_OPENSSL
+#endif
 
 
 /* Painting */

@@ -111,6 +111,7 @@
 /libports/src/lib/ncurses/unctrl.c
 /libports/tool/mesa/glsl
 /libports/tool/mupdf
+/libports/include/sqlite3
 /ports-foc/contrib
 /ports-okl4/contrib
 /ports-okl4/download

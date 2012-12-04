@@ -40,6 +40,15 @@ namespace Terminal {
 		 * Read character from terminal
 		 */
 		virtual char get_char() = 0;
+
+		/**
+		 * Set baud rate for terminal
+		 */
+		virtual bool set_baudrate(int /*baud*/)
+		{
+			PDBG("Setting baudrate is not supported yet. Use default 115200.");
+			return false;
+		}
 	};
 
 	/**
@@ -53,6 +62,7 @@ namespace Terminal {
 		 * Construct new driver
 		 *
 		 * \param index     index of UART to access
+		 * \param baudrate  baudrate of UART
 		 * \param callback  functor called when data becomes available for
 		 *                  reading
 		 *
@@ -62,7 +72,7 @@ namespace Terminal {
 		 * handler. Hence, the operations performed by the registered
 		 * function must be properly synchronized.
 		 */
-		virtual Driver *create(unsigned index, Char_avail_callback &callback) = 0;
+		virtual Driver *create(unsigned index, unsigned baudrate, Char_avail_callback &callback) = 0;
 
 		/**
 		 * Destroy driver

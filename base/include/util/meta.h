@@ -72,11 +72,11 @@ namespace Genode {
 		 */
 		template <typename T1 = Void, typename  T2 = Void, typename T3 = Void, typename T4 = Void,
 		          typename T5 = Void, typename  T6 = Void, typename T7 = Void, typename T8 = Void,
-		          typename T9 = Void, typename T10 = Void>
+				  typename T9 = Void, typename T10 = Void, typename T11 = Void, typename T12 = Void>
 		struct Type_list;
 
 		template <>
-		struct Type_list<Void, Void, Void, Void, Void, Void, Void, Void, Void, Void> { typedef Empty Head; };
+		struct Type_list<Void, Void, Void, Void, Void, Void, Void, Void, Void, Void, Void, Void> { typedef Empty Head; };
 
 		template <typename T1>
 		struct Type_list<T1, Void> : public Type_tuple<T1, Empty> { };
@@ -105,6 +105,11 @@ namespace Genode {
 		template <typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7, typename T8, typename T9>
 		struct Type_list<T1, T2, T3, T4, T5, T6, T7, T8, T9, Void> : public Type_tuple<T1, Type_list<T2, T3, T4, T5, T6, T7, T8, T9> > { };
 
+		template <typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7, typename T8, typename T9, typename T10>
+		struct Type_list<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, Void> : public Type_tuple<T1, Type_list<T2, T3, T4, T5, T6, T7, T8, T9, T10> > { };
+
+		template <typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7, typename T8, typename T9, typename T10, typename T11>
+		struct Type_list<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, Void> : public Type_tuple<T1, Type_list<T2, T3, T4, T5, T6, T7, T8, T9, T10, T11> > { };
 
 		/**
 		 * Macro for wrapping the 'Type_list' template

@@ -14,10 +14,21 @@ struct Dss : Genode::Mmio
 {
 	Dss(Genode::addr_t const mmio_base) : Genode::Mmio(mmio_base) { }
 
-	struct Sysstatus : Register<0x14, 32> { };
+	struct Revision : Register<0x00, 32> { };
+
+	struct Sysstatus : Register<0x14, 32> {
+		struct Reset : Bitfield<0, 1>
+		{
+			enum { RESETDONE = 1 };
+		};
+	};
 
 	struct Ctrl : Register<0x40, 32>
 	{
+		struct Lcd2_ts_sel : Bitfield<17, 1>
+		{
+			enum { LCD2=0, TV = 1 };
+		};
 		struct Venc_hdmi_switch : Bitfield<15, 1>
 		{
 			enum { HDMI = 1 };

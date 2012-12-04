@@ -1,10 +1,6 @@
 LIBSSL     = libssl-1.0.0
 LIBSSL_DIR = $(REP_DIR)/contrib/openssl-1.0.1c
 
-#
-# ARM is not supported currently (needs testing)
-#
-REQUIRES = x86
 
 LIBS      += libc libcrypto
 
@@ -21,14 +17,6 @@ SRC_C = s2_meth.c   s2_srvr.c s2_clnt.c  s2_lib.c  s2_enc.c s2_pkt.c \
 
 INC_DIR += $(LIBSSL_DIR)/
 INC_DIR += $(LIBSSL_DIR)/crypto
-
-ifeq ($(filter-out $(SPECS),x86_32),)
-TARGET_CPUARCH=x86_32
-else ifeq ($(filter-out $(SPECS),x86_64),)
-TARGET_CPUARCH=x86_64
-endif
-
-INC_DIR += $(REP_DIR)/src/lib/openssl/$(TARGET_CPUARCH)/
 
 
 vpath %.c $(LIBSSL_DIR)/ssl

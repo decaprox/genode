@@ -15,7 +15,7 @@ COMPILER_MOC_HEADER_MAKE_ALL_FILES_FILTER_OUT = \
   moc_qftp.cpp \
   moc_qnetworkaccessdebugpipebackend_p.cpp \
   moc_qnetworkaccessftpbackend_p.cpp \
-  moc_qudpsocket.cpp
+  moc_qudpsocket.cpp 
 
 COMPILER_MOC_SOURCE_MAKE_ALL_FILES_FILTER_OUT = \
   qftp.moc
@@ -23,7 +23,7 @@ COMPILER_MOC_SOURCE_MAKE_ALL_FILES_FILTER_OUT = \
 INC_DIR += $(REP_DIR)/include/qt4/QtNetwork/private \
            $(REP_DIR)/contrib/$(QT4)/include/QtNetwork/private
 
-LIBS += qt_core zlib libc
+LIBS += qt_core zlib libc libcrypto libssl
 
 vpath % $(REP_DIR)/include/qt4/QtNetwork
 vpath % $(REP_DIR)/include/qt4/QtNetwork/private
@@ -32,10 +32,12 @@ vpath % $(REP_DIR)/src/lib/qt4/src/network/access
 vpath % $(REP_DIR)/src/lib/qt4/src/network/bearer
 vpath % $(REP_DIR)/src/lib/qt4/src/network/kernel
 vpath % $(REP_DIR)/src/lib/qt4/src/network/socket
+vpath % $(REP_DIR)/src/lib/qt4/src/network/ssl
 
 vpath % $(REP_DIR)/contrib/$(QT4)/src/network/access
 vpath % $(REP_DIR)/contrib/$(QT4)/src/network/bearer
 vpath % $(REP_DIR)/contrib/$(QT4)/src/network/kernel
 vpath % $(REP_DIR)/contrib/$(QT4)/src/network/socket
+vpath % $(REP_DIR)/contrib/$(QT4)/src/network/ssl
 
 include $(REP_DIR)/lib/mk/qt.inc

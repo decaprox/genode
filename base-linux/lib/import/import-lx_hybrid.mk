@@ -7,7 +7,7 @@ include $(call select_from_repositories,lib/import/import-syscall.mk)
 # Manually supply all library search paths of the host compiler to our tool
 # chain.
 #
-HOST_LIB_SEARCH_DIRS = $(shell cc $(CC_MARCH) -print-search-dirs | grep libraries |\
+HOST_LIB_SEARCH_DIRS = $(shell LC_ALL="C" cc $(CC_MARCH) -print-search-dirs | grep libraries |\
                                sed "s/.*=//"   | sed "s/:/ /g" |\
                                sed "s/\/ / /g" | sed "s/\/\$$//")
 #

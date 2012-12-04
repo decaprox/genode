@@ -38,6 +38,7 @@ usage:
 	@echo "                  'foc_vea9x4'"
 	@echo "                  'foc_panda'"
 	@echo "                  'lx_hybrid_x86'"
+	@echo "                  'foc_overo'"
 	@echo
 	@echo "  <build-dir>  is the location of the build directory to create"
 	@echo
@@ -118,7 +119,7 @@ $(BUILD_DIR)/Makefile:
 #
 # Add 'ports-foc' repository to Fiasco.OC build directory
 #
-ifeq ($(filter-out foc_x86_32 foc_imx53 foc_pbxa9 foc_vea9x4 foc_panda,$(PLATFORM)),)
+ifeq ($(filter-out foc_x86_32 foc_pbxa9 foc_imx53 foc_overo foc_vea9x4 foc_panda,$(PLATFORM)),)
 $(BUILD_DIR)/etc/build.conf::
 	@cat $(BUILD_CONF).ports-foc >> $@
 endif
@@ -200,6 +201,9 @@ hw_imx53::
 lx_hybrid_x86::
 	@echo "CROSS_DEV_PREFIX =" > $(BUILD_DIR)/etc/tools.conf
 	@echo "SPECS += always_hybrid" >> $(BUILD_DIR)/etc/specs.conf
+
+foc_overo::
+	@echo "SPECS = genode foc_overo" > $(BUILD_DIR)/etc/specs.conf
 
 $(PLATFORM)::
 	@echo "successfully created build directory at $(BUILD_DIR)"

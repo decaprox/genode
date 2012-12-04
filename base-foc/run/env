@@ -178,7 +178,7 @@ proc build_boot_image_arm {binaries} {
 	set gen_img_cmd "make -C [l4_dir]/source O=[l4_dir] E=genode "
 	append gen_img_cmd "MODULES_LIST=[pwd]/[run_dir]/modules.list "
 	append gen_img_cmd "MODULE_SEARCH_PATH=[pwd]/[run_dir]:[file dirname [fiasco]]:[l4_dir] "
-	append gen_img_cmd "SYSTEM_TARGET=[cross_dev_prefix] elfimage"
+	append gen_img_cmd "SYSTEM_TARGET=[cross_dev_prefix] uimage"
 
 	set pid [eval "spawn sh -c \"$gen_img_cmd\""]
 	expect { eof { } }
@@ -188,6 +188,7 @@ proc build_boot_image_arm {binaries} {
 	}
 
 	exec cp [bin_dir]/bootstrap.elf [run_dir]/image.elf
+	exec cp [bin_dir]/bootstrap_genode.uimage [run_dir]/image.uimage
 
 	puts "\nboot image: [run_dir]/image.elf\n"
 }

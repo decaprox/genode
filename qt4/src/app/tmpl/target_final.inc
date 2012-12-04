@@ -59,3 +59,8 @@ endif
 ifeq ($(findstring webkit, $(QT)), webkit)
 LIBS += qt_webcore
 endif
+
+# QtWebKit
+ifeq ($(findstring sql, $(QT)), sql)
+LIBS += qt_sql
+endif

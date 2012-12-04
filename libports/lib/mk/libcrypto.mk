@@ -1,17 +1,16 @@
 LIBCRYPTO     = libcrypto-1.0.0
 LIBCRYPTO_DIR = $(REP_DIR)/contrib/openssl-1.0.1c/crypto
 
-#
-# ARM is not supported currently (needs testing)
-#
-REQUIRES = x86
 
 SHARED_LIB = yes
 
-LIBS += libc
+LIBS += libc zlib
 
-CC_OPT += -DDSO_DLFCN -DHAVE_DLFCN_H -Wa,--noexecstack -DL_ENDIAN -DTERMIOS \
+CC_OPT += -DOPENSSL_SYS_GENODE -DDSO_DLFCN -DHAVE_DLFCN_H -Wa,--noexecstack -DL_ENDIAN -DTERMIOS \
           -DOPENSSL_NO_ASM
+
+CC_OPT += -DOPENSSL_NO_HW -DZLIB -DOPENSSL_NO_STATIC_ENGINE
+
 
 #
 # crypto base source
@@ -119,7 +118,7 @@ SRC_C_hmac     = hmac.c hm_ameth.c hm_pmeth.c
 SRC_C_idea     = i_cbc.c i_cfb64.c i_ecb.c i_ofb64.c i_skey.c
 SRC_C_krb5     = krb5_asn.c
 SRC_C_lhash    = lhash.c lh_stats.c
-SRC_C_md2      = md2_dgst.c md2_one.c
+#SRC_C_md2      = md2_dgst.c md2_one.c
 SRC_C_md4      = md4_dgst.c md4_one.c
 SRC_C_md5      = md5_dgst.c md5_one.c
 SRC_C_mdc2     = mdc2_one.c mdc2dgst.c
@@ -144,7 +143,7 @@ SRC_C_rand     = md_rand.c randfile.c rand_lib.c rand_err.c \
                  rand_nw.c
 SRC_C_rc2      = rc2_ecb.c rc2_skey.c rc2_cbc.c rc2cfb64.c rc2ofb64.c
 SRC_C_rc4      = rc4_skey.c rc4_enc.c rc4_utl.c
-SRC_C_rc5      = rc5_skey.c rc5_ecb.c rc5_enc.c rc5cfb64.c rc5ofb64.c
+#SRC_C_rc5      = rc5_skey.c rc5_ecb.c rc5_enc.c rc5cfb64.c rc5ofb64.c
 SRC_C_ripemd   = rmd_dgst.c rmd_one.c
 SRC_C_rsa      = rsa_eay.c rsa_gen.c rsa_lib.c rsa_sign.c rsa_saos.c \
                  rsa_err.c rsa_pk1.c rsa_ssl.c rsa_none.c rsa_oaep.c \
@@ -156,7 +155,7 @@ SRC_C_sha      = sha_dgst.c sha1dgst.c sha_one.c sha1_one.c sha256.c \
                  sha512.c
 SRC_C_srp      = srp_lib.c srp_vfy.c
 SRC_C_stack    = stack.c
-SRC_C_store    = str_err.c str_lib.c str_meth.c str_mem.c
+#SRC_C_store    = str_err.c str_lib.c str_meth.c str_mem.c
 #SRC_C_threads  = th-lock.c
 SRC_C_ts       = ts_err.c ts_req_utils.c ts_req_print.c ts_rsp_utils.c \
                  ts_rsp_print.c ts_rsp_sign.c ts_rsp_verify.c \
@@ -181,9 +180,11 @@ SRC_C_x509v3   = v3_bcons.c v3_bitst.c v3_conf.c v3_extku.c \
                  v3_addr.c
 
 SRC_DIR = aes asn1 bf bio bn buffer camellia cast cmac cms comp conf des dh \
-          dsa dso ec ecdh ecdsa engine err evp hmac idea krb5 lhash md2 md4 md5 \
-          mdc2 objects modes ocsp pem pkcs12 pkcs7 pqueue rand rc2 rc4 rc5 \
-          ripemd rsa seed sha srp stack store ts txt_db ui whrlpool x509 x509v3
+          dsa dso ec ecdh ecdsa engine err evp hmac idea krb5 lhash  md4 md5 \
+          mdc2 objects modes ocsp pem pkcs12 pkcs7 pqueue rand rc2 rc4  \
+          ripemd rsa seed sha srp stack  ts txt_db ui whrlpool x509 x509v3
+
+# md2 rc5 store
 
 SRC_C += $(foreach dir,$(SRC_DIR),$(addprefix $(dir)/,$(SRC_C_$(dir))))
 
@@ -194,18 +195,6 @@ INC_DIR += $(LIBCRYPTO_DIR)
 INC_DIR += $(LIBCRYPTO_DIR)/../
 
 CC_OPTS += -DL_ENDIAN
-
-ifeq ($(filter-out $(SPECS),x86_32),)
-TARGET_CPUARCH=x86_32
-else ifeq ($(filter-out $(SPECS),x86_64),)
-TARGET_CPUARCH=x86_64
-
-SRC_S += modexp512.s
-SRC_S += rc4_md5.s
-endif
-
-INC_DIR += $(REP_DIR)/src/lib/openssl/$(TARGET_CPUARCH)/
-
 
 #
 # Generate buildinf.h
@@ -220,5 +209,4 @@ buildinf.h:
 	echo "  #define PLATFORM \"FreeBSD-$(TARGET_CPUARCH)\""; \
 	echo "#endif" ) > $@
 
-vpath %.s $(REP_DIR)/src/lib/openssl/$(TARGET_CPUARCH)
 vpath %.c $(LIBCRYPTO_DIR)

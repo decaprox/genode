@@ -1,0 +1,1456 @@
+diff --git a/QupZilla.pro b/QupZilla.pro
+index 775422f..c30de83 100644
+--- a/QupZilla.pro
++++ b/QupZilla.pro
+@@ -14,5 +14,5 @@ lessThan(QT_VERSION, 4.7) {
+ mac|unix: system(test -d bin/plugins || mkdir bin/plugins)
+ 
+ TEMPLATE = subdirs
+-SUBDIRS = src/lib src/main src/plugins
++SUBDIRS = src/main
+ CONFIG += ordered
+diff --git a/bin/themes/default/main.css b/bin/themes/default/main.css
+index 9f8b2ee..248659b 100644
+--- a/bin/themes/default/main.css
++++ b/bin/themes/default/main.css
+@@ -11,14 +11,6 @@
+ }
+ 
+ /*MainWindow*/
+-#mainwindow
+-{
+-    background-image: url(images/background.png);
+-    background-position: top right;
+-    background-repeat: no-repeat;
+-    background-color: #e4eefa;
+-}
+-
+ #mainwindow-menubar
+ {
+     background-image:url(images/transp.png);
+diff --git a/src/defines.pri b/src/defines.pri
+index ef1d35f..7f4ed1f 100644
+--- a/src/defines.pri
++++ b/src/defines.pri
+@@ -3,80 +3,80 @@ OBJECTS_DIR = $$PWD/../build
+ MOC_DIR = $$PWD/../build
+ RCC_DIR = $$PWD/../build
+ UI_DIR = $$PWD/../build
+-unix: VERSION = 1.3.5
++#unix: VERSION = 1.3.5
+ 
+ # Please read BUILD information #
+-#DEFINES *= NO_SYSTEM_DATAPATH
++DEFINES += NO_SYSTEM_DATAPATH
+ #DEFINES *= USE_WEBGL
+ #DEFINES *= KDE
+-#DEFINES *= PORTABLE_BUILD
+-win32-msvc* {
+-    DEFINES *= W7API
+-    LIBS += User32.lib Ole32.lib Shell32.lib ShlWapi.lib Gdi32.lib ComCtl32.lib
+-}
++DEFINES += PORTABLE_BUILD
++#win32-msvc* {
++#    DEFINES *= W7API
++#    LIBS += User32.lib Ole32.lib Shell32.lib ShlWapi.lib Gdi32.lib ComCtl32.lib
++#}
+ 
+-DEFINES *= QT_NO_URL_CAST_FROM_STRING
+-DEFINES *= QT_USE_QSTRINGBUILDER
++DEFINES += QT_NO_URL_CAST_FROM_STRING
++DEFINES += QT_USE_QSTRINGBUILDER
+ 
+-CONFIG(debug, debug|release): DEFINES *= QUPZILLA_DEBUG_BUILD
++#CONFIG(debug, debug|release): DEFINES *= QUPZILLA_DEBUG_BUILD
+ 
+-d_no_system_datapath = $$(NO_SYSTEM_DATAPATH)
+-d_use_webgl = $$(USE_WEBGL)
+-d_w7api = $$(W7API)
+-d_kde = $$(KDE)
+-d_portable = $$(PORTABLE_BUILD)
+-d_nonblock_dialogs = $$(NONBLOCK_JS_DIALOGS)
+-d_use_qtwebkit_2_2 = $$(USE_QTWEBKIT_2_2)
+-d_use_lib_path = $$(USE_LIBPATH)
+-d_disable_dbus = $$(DISABLE_DBUS)
+-
+-equals(d_no_system_datapath, "true") { DEFINES *= NO_SYSTEM_DATAPATH }
+-equals(d_use_webgl, "true") { DEFINES *= USE_WEBGL }
+-win32-msvc* {
+-    equals(d_w7api, "true") { DEFINES *= W7API }
+-}
+-equals(d_kde, "true") { DEFINES *= KDE }
+-equals(d_portable, "true") { DEFINES *= PORTABLE_BUILD }
+-equals(d_nonblock_dialogs, "true") { DEFINES *= NONBLOCK_JS_DIALOGS }
+-equals(d_use_qtwebkit_2_2, "true") { DEFINES *= USE_QTWEBKIT_2_2 }
+-equals(d_disable_dbus, "true") { DEFINES *= DISABLE_DBUS }
+-
+-!mac:unix {
+-    d_prefix = $$(QUPZILLA_PREFIX)
+-    binary_folder = /usr/bin
+-    library_folder = /usr/lib
+-    data_folder = /usr/share/qupzilla
+-    launcher_folder = /usr/share/applications
+-    icon_folder = /usr/share/pixmaps
+-    hicolor_folder = /usr/share/icons/hicolor
+-
+-    !equals(d_prefix, "") {
+-        binary_folder = "$$d_prefix"bin
+-        library_folder = "$$d_prefix"lib
+-        data_folder = "$$d_prefix"share/qupzilla
+-        launcher_folder = "$$d_prefix"share/applications
+-        icon_folder = "$$d_prefix"share/pixmaps
+-        hicolor_folder = "$$d_prefix"share/icons/hicolor
+-    }
+-
+-    !equals(d_use_lib_path, "") {
+-        library_folder = $$d_use_lib_path
+-        DEFINES *= USE_LIBPATH=\\\"""$$d_use_lib_path/"\\\""
+-    }
+-
+-    DEFINES *= USE_DATADIR=\\\"""$$data_folder/"\\\""
+-
+-    #Git revision
+-    rev = $$system(cd ../ && sh $$PWD/../scripts/getrevision.sh)
+-    !equals(rev, ""): DEFINES *= GIT_REVISION=\\\"""$$rev"\\\""
+-}
+-
+-isEmpty(QMAKE_LRELEASE) {
+-    win32|os2:QMAKE_LRELEASE = $$[QT_INSTALL_BINS]\\lrelease.exe
+-    else:QMAKE_LRELEASE = $$[QT_INSTALL_BINS]/lrelease
+-    unix {
+-        !exists($$QMAKE_LRELEASE) { QMAKE_LRELEASE = lrelease-qt4 }
+-    } else {
+-        !exists($$QMAKE_LRELEASE) { QMAKE_LRELEASE = lrelease }
+-    }
+-}
++# d_no_system_datapath = $$(NO_SYSTEM_DATAPATH)
++# d_use_webgl = $$(USE_WEBGL)
++# d_w7api = $$(W7API)
++# d_kde = $$(KDE)
++# d_portable = $$(PORTABLE_BUILD)
++# d_nonblock_dialogs = $$(NONBLOCK_JS_DIALOGS)
++# d_use_qtwebkit_2_2 = $$(USE_QTWEBKIT_2_2)
++# d_use_lib_path = $$(USE_LIBPATH)
++# d_disable_dbus = $$(DISABLE_DBUS)
++# 
++# equals(d_no_system_datapath, "true") { DEFINES *= NO_SYSTEM_DATAPATH }
++# equals(d_use_webgl, "true") { DEFINES *= USE_WEBGL }
++# win32-msvc* {
++#     equals(d_w7api, "true") { DEFINES *= W7API }
++# }
++# equals(d_kde, "true") { DEFINES *= KDE }
++# equals(d_portable, "true") { DEFINES *= PORTABLE_BUILD }
++# equals(d_nonblock_dialogs, "true") { DEFINES *= NONBLOCK_JS_DIALOGS }
++# equals(d_use_qtwebkit_2_2, "true") { DEFINES *= USE_QTWEBKIT_2_2 }
++# equals(d_disable_dbus, "true") { DEFINES *= DISABLE_DBUS }
++# 
++# !mac:unix {
++#     d_prefix = $$(QUPZILLA_PREFIX)
++#     binary_folder = /usr/bin
++#     library_folder = /usr/lib
++#     data_folder = /usr/share/qupzilla
++#     launcher_folder = /usr/share/applications
++#     icon_folder = /usr/share/pixmaps
++#     hicolor_folder = /usr/share/icons/hicolor
++# 
++#     !equals(d_prefix, "") {
++#         binary_folder = "$$d_prefix"bin
++#         library_folder = "$$d_prefix"lib
++#         data_folder = "$$d_prefix"share/qupzilla
++#         launcher_folder = "$$d_prefix"share/applications
++#         icon_folder = "$$d_prefix"share/pixmaps
++#         hicolor_folder = "$$d_prefix"share/icons/hicolor
++#     }
++# 
++#     !equals(d_use_lib_path, "") {
++#         library_folder = $$d_use_lib_path
++#         DEFINES *= USE_LIBPATH=\\\"""$$d_use_lib_path/"\\\""
++#     }
++# 
++#     DEFINES *= USE_DATADIR=\\\"""$$data_folder/"\\\""
++# 
++#     #Git revision
++#     rev = $$system(cd ../ && sh $$PWD/../scripts/getrevision.sh)
++#     !equals(rev, ""): DEFINES *= GIT_REVISION=\\\"""$$rev"\\\""
++# }
++# 
++# isEmpty(QMAKE_LRELEASE) {
++#     win32|os2:QMAKE_LRELEASE = $$[QT_INSTALL_BINS]\\lrelease.exe
++#     else:QMAKE_LRELEASE = $$[QT_INSTALL_BINS]/lrelease
++#     unix {
++#         !exists($$QMAKE_LRELEASE) { QMAKE_LRELEASE = lrelease-qt4 }
++#     } else {
++#         !exists($$QMAKE_LRELEASE) { QMAKE_LRELEASE = lrelease }
++#     }
++# }
+diff --git a/src/lib/app/mainapplication.cpp b/src/lib/app/mainapplication.cpp
+index a37d802..516b33a 100644
+--- a/src/lib/app/mainapplication.cpp
++++ b/src/lib/app/mainapplication.cpp
+@@ -69,7 +69,8 @@
+ #endif
+ 
+ MainApplication::MainApplication(int &argc, char** argv)
+-    : QtSingleApplication(argc, argv)
++    :QApplication(argc, argv)
++/*	QtSingleApplication(argc, argv) */
+     , m_cookiemanager(0)
+     , m_browsingLibrary(0)
+     , m_historymodel(0)
+@@ -111,7 +112,7 @@ MainApplication::MainApplication(int &argc, char** argv)
+ #endif
+ 
+     TRANSLATIONSDIR = DATADIR + "locale/";
+-    THEMESDIR = DATADIR + "themes/";
++    THEMESDIR = /*DATADIR + */":/themes/";
+ 
+     setWindowIcon(QIcon(":icons/exeicons/qupzilla-window.png"));
+     bool noAddons = false;
+@@ -171,7 +172,8 @@ MainApplication::MainApplication(int &argc, char** argv)
+ 
+     // Don't start single application in private browsing
+     if (!m_isPrivateSession) {
+-        QString appId = "QupZillaWebBrowser";
++        #if 0
++		QString appId = "QupZillaWebBrowser";
+ 
+         if (newInstance) {
+             if (startProfile.isEmpty() || startProfile == QLatin1String("default")) {
+@@ -183,19 +185,20 @@ MainApplication::MainApplication(int &argc, char** argv)
+         }
+ 
+         setAppId(appId);
++		#endif
+     }
+ 
+     if (messages.isEmpty()) {
+         messages.append(QLatin1String(" "));
+     }
+ 
+-    if (isRunning()) {
+-        foreach(const QString & message, messages) {
+-            sendMessage(message);
+-        }
+-        m_isClosing = true;
+-        return;
+-    }
++//     if (isRunning()) {
++//         foreach(const QString & message, messages) {
++//             sendMessage(message);
++//         }
++//         m_isClosing = true;
++//         return;
++//     }
+ 
+ #ifdef Q_OS_MAC
+     setQuitOnLastWindowClosed(false);
+@@ -233,6 +236,7 @@ MainApplication::MainApplication(int &argc, char** argv)
+     translateApp();
+ 
+     QupZilla* qupzilla = new QupZilla(Qz::BW_FirstAppWindow, startUrl);
++    qupzilla->show();
+     m_mainWindows.append(qupzilla);
+ 
+     connect(qupzilla, SIGNAL(message(Qz::AppMessageType, bool)), this, SLOT(sendMessages(Qz::AppMessageType, bool)));
+@@ -333,8 +337,8 @@ void MainApplication::loadSettings()
+         css.append(cssFile.readAll());
+         cssFile.close();
+     }
+-
+-    QString relativePath = QDir::current().relativeFilePath(m_activeThemePath);
++    
++    QString relativePath = /*QDir::current().relativeFilePath(*/m_activeThemePath/*)*/;
+     css.replace(QRegExp("url\\s*\\(\\s*([^\\*:\\);]+)\\s*\\)", Qt::CaseSensitive, QRegExp::RegExp2),
+                 QString("url(%1\\1)").arg(relativePath + "/"));
+     setStyleSheet(css);
+diff --git a/src/lib/app/mainapplication.h b/src/lib/app/mainapplication.h
+index 3978235..fe2ee51 100644
+--- a/src/lib/app/mainapplication.h
++++ b/src/lib/app/mainapplication.h
+@@ -18,6 +18,8 @@
+ #ifndef MAINAPPLICATION_H
+ #define MAINAPPLICATION_H
+ 
++#include <QtGui/QApplication>
++
+ #define mApp MainApplication::getInstance()
+ 
+ #include <QList>
+@@ -50,7 +52,7 @@ class DatabaseWriter;
+ class UserAgentManager;
+ class ProxyStyle;
+ 
+-class QT_QUPZILLA_EXPORT MainApplication : public QtSingleApplication
++class QT_QUPZILLA_EXPORT MainApplication : public QApplication
+ {
+     Q_OBJECT
+ 
+diff --git a/src/lib/app/qupzilla.cpp b/src/lib/app/qupzilla.cpp
+index 52ba84b..386f6f0 100644
+--- a/src/lib/app/qupzilla.cpp
++++ b/src/lib/app/qupzilla.cpp
+@@ -53,7 +53,7 @@
+ #include "statusbarmessage.h"
+ #include "browsinglibrary.h"
+ #include "navigationbar.h"
+-#include "pagescreen.h"
++//#include "pagescreen.h"
+ #include "webinspectordockwidget.h"
+ #include "bookmarksimportdialog.h"
+ #include "globalfunctions.h"
+@@ -324,9 +324,9 @@ void QupZilla::setupMenu()
+     m_actionCloseWindow->setShortcut(QKeySequence("Ctrl+Shift+W"));
+     m_menuFile->addSeparator();
+     m_menuFile->addAction(QIcon::fromTheme("document-save"), tr("&Save Page As..."), this, SLOT(savePage()))->setShortcut(QKeySequence("Ctrl+S"));
+-    m_menuFile->addAction(tr("Save Page Screen"), this, SLOT(savePageScreen()));
++//    m_menuFile->addAction(tr("Save Page Screen"), this, SLOT(savePageScreen()));
+     m_menuFile->addAction(QIcon::fromTheme("mail-message-new"), tr("Send Link..."), this, SLOT(sendLink()));
+-    m_menuFile->addAction(QIcon::fromTheme("document-print"), tr("&Print..."), this, SLOT(printPage()))->setShortcut(QKeySequence("Ctrl+P"));
++//    m_menuFile->addAction(QIcon::fromTheme("document-print"), tr("&Print..."), this, SLOT(printPage()))->setShortcut(QKeySequence("Ctrl+P"));
+     m_menuFile->addSeparator();
+     m_menuFile->addSeparator();
+     m_menuFile->addAction(tr("Import bookmarks..."), this, SLOT(showBookmarkImport()));
+@@ -1548,28 +1548,28 @@ void QupZilla::sendLink()
+     weView()->sendPageByMail();
+ }
+ 
+-void QupZilla::printPage(QWebFrame* frame)
+-{
+-    QPrintPreviewDialog* dialog = new QPrintPreviewDialog(this);
+-    dialog->resize(800, 750);
++//void QupZilla::printPage(QWebFrame* frame)
++//{
++//    QPrintPreviewDialog* dialog = new QPrintPreviewDialog(this);
++//    dialog->resize(800, 750);
+ 
+-    if (!frame) {
+-        connect(dialog, SIGNAL(paintRequested(QPrinter*)), weView(), SLOT(print(QPrinter*)));
+-    }
+-    else {
+-        connect(dialog, SIGNAL(paintRequested(QPrinter*)), frame, SLOT(print(QPrinter*)));
+-    }
++//    if (!frame) {
++//        connect(dialog, SIGNAL(paintRequested(QPrinter*)), weView(), SLOT(print(QPrinter*)));
++//    }
++//    else {
++//        connect(dialog, SIGNAL(paintRequested(QPrinter*)), frame, SLOT(print(QPrinter*)));
++//    }
+ 
+-    dialog->exec();
++//    dialog->exec();
+ 
+-    dialog->deleteLater();
+-}
++//    dialog->deleteLater();
++//}
+ 
+-void QupZilla::savePageScreen()
+-{
+-    PageScreen* p = new PageScreen(weView(), this);
+-    p->show();
+-}
++//void QupZilla::savePageScreen()
++//{
++//    PageScreen* p = new PageScreen(weView(), this);
++//    p->show();
++//}
+ 
+ void QupZilla::resizeEvent(QResizeEvent* event)
+ {
+diff --git a/src/lib/app/qupzilla.h b/src/lib/app/qupzilla.h
+index 9d27d73..92d0172 100644
+--- a/src/lib/app/qupzilla.h
++++ b/src/lib/app/qupzilla.h
+@@ -122,7 +122,7 @@ public slots:
+     void bookmarkPage();
+     void loadAddress(const QUrl &url);
+     void showSource(QWebFrame* frame = 0, const QString &selectedHtml = QString());
+-    void printPage(QWebFrame* frame = 0);
++//    void printPage(QWebFrame* frame = 0);
+     void showPageInfo();
+     void receiveMessage(Qz::AppMessageType mes, bool state);
+ 
+@@ -137,7 +137,7 @@ private slots:
+     void reloadByPassCache();
+     void aboutQupZilla();
+     void addTab();
+-    void savePageScreen();
++//    void savePageScreen();
+ 
+     void aboutToShowFileMenu();
+     void aboutToHideFileMenu();
+diff --git a/src/lib/app/qz_namespace.h b/src/lib/app/qz_namespace.h
+index 08c15f8..c952bcf 100644
+--- a/src/lib/app/qz_namespace.h
++++ b/src/lib/app/qz_namespace.h
+@@ -82,6 +82,7 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(Qz::NewTabPositionFlags)
+ 
+ }
+ 
++#if 0
+ #ifdef Q_OS_WIN
+ #define DEFAULT_THEME_NAME "windows"
+ #elif defined(Q_WS_X11)
+@@ -93,6 +94,8 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(Qz::NewTabPositionFlags)
+ #else
+ #define DEFAULT_THEME_NAME "default"
+ #endif
++#endif
++#define DEFAULT_THEME_NAME "default"
+ 
+ #ifdef Q_OS_WIN
+ #define DEFAULT_CHECK_UPDATES true
+diff --git a/src/lib/data/theme.qrc b/src/lib/data/theme.qrc
+new file mode 100644
+index 0000000..a58f490
+--- /dev/null
++++ b/src/lib/data/theme.qrc
+@@ -0,0 +1,33 @@
++<RCC>
++    <qresource prefix="/">
++        <file>themes/default/main.css</file>
++        <file>themes/default/rtl.css</file>
++        <file>themes/default/theme.info</file>
++        <file>themes/default/theme.png</file>
++        <file>themes/default/images/arrow-down.gif</file>
++        <file>themes/default/images/background.png</file>
++        <file>themes/default/images/flash.png</file>
++        <file>themes/default/images/flashstart.png</file>
++        <file>themes/default/images/gotoaddress.png</file>
++        <file>themes/default/images/library-bg-left.png</file>
++        <file>themes/default/images/library-bg-top-right.png</file>
++        <file>themes/default/images/library-bg-top.png</file>
++        <file>themes/default/images/lineedit-bg.png</file>
++        <file>themes/default/images/navigation-addtab.png</file>
++        <file>themes/default/images/navigation-back.png</file>
++        <file>themes/default/images/navigation-forward.png</file>
++        <file>themes/default/images/navigation-home.png</file>
++        <file>themes/default/images/navigation-reload.png</file>
++        <file>themes/default/images/navigation-stop.png</file>
++        <file>themes/default/images/navigation-supmenu.png</file>
++        <file>themes/default/images/rss.png</file>
++        <file>themes/default/images/search.png</file>
++        <file>themes/default/images/semi-transp.png</file>
++        <file>themes/default/images/siteicon-bg-secure.png</file>
++        <file>themes/default/images/siteicon-bg.png</file>
++        <file>themes/default/images/star.png</file>
++        <file>themes/default/images/starg.png</file>
++        <file>themes/default/images/tabs-list-button.png</file>
++        <file>themes/default/images/transp.png</file>
++    </qresource>
++</RCC>
+diff --git a/src/lib/lib.pro b/src/lib/lib.pro
+index 2470b59..6afc6a4 100644
+--- a/src/lib/lib.pro
++++ b/src/lib/lib.pro
+@@ -1,407 +1,408 @@
+ QT += core gui webkit sql network script
+-TARGET = QupZilla
+-TEMPLATE = lib
++#TARGET = QupZilla
++#TEMPLATE = lib
+ 
+-DEFINES *= QUPZILLA_SHAREDLIBRARY
++#DEFINES *= QUPZILLA_SHAREDLIBRARY
+ 
+-include(3rdparty/qtsingleapplication.pri)
+-include(../defines.pri)
+-include(../../translations/translations.pri)
++#include(3rdparty/qtsingleapplication.pri)
++include $(REP_DIR)/contrib/$(QUPZILLA)/src/defines.pri
++#include(../../translations/translations.pri)
+ #include(../../tests/modeltest/modeltest.pri)
+ 
+-unix:!contains(DEFINES, "DISABLE_DBUS") QT += dbus
++#unix:!contains(DEFINES, "DISABLE_DBUS") QT += dbus
+ 
+-INCLUDEPATH += 3rdparty\
+-               app\
+-               autofill\
+-               bookmarks\
+-               cookies\
+-               session\
+-               downloads\
+-               history\
+-               navigation\
+-               network\
+-               other\
+-               preferences\
+-               rss\
+-               tools\
+-               utils\
+-               webview\
+-               plugins\
+-               sidebar\
+-               data\
+-               adblock\
+-               desktopnotifications\
+-               opensearch\
+-               bookmarksimport\
+-               popupwindow\
++INCLUDEPATH += $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/3rdparty\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/app\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/autofill\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/bookmarks\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/cookies\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/session\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/downloads\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/history\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/navigation\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/network\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/other\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/preferences\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/rss\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/tools\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/utils\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/webview\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/plugins\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/sidebar\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/data\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/adblock\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/desktopnotifications\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/opensearch\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/bookmarksimport\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/popupwindow\
+ 
+ SOURCES += \
+-    webview/tabpreview.cpp \
+-    3rdparty/qtwin.cpp \
+-    3rdparty/lineedit.cpp \
+-    app/qupzilla.cpp \
+-    app/mainapplication.cpp \
+-    app/autosaver.cpp \
+-    autofill/autofillmodel.cpp \
+-    preferences/autofillmanager.cpp \
+-    bookmarks/bookmarkstoolbar.cpp \
+-    bookmarks/bookmarksmanager.cpp \
+-    cookies/cookiemanager.cpp \
+-    cookies/cookiejar.cpp \
+-    downloads/downloadmanager.cpp \
+-    history/historymanager.cpp \
+-    navigation/websearchbar.cpp \
+-    navigation/locationbar.cpp \
+-    navigation/locationbarpopup.cpp \
+-    network/networkmanagerproxy.cpp \
+-    network/networkmanager.cpp \
+-    other/updater.cpp \
+-    other/sourceviewer.cpp \
+-    preferences/preferences.cpp \
+-    rss/rssmanager.cpp \
+-    other/clearprivatedata.cpp \
+-    webview/webpage.cpp \
+-    webview/tabwidget.cpp \
+-    webview/tabbar.cpp \
+-    webview/siteinfo.cpp \
+-    webview/searchtoolbar.cpp \
+-    app/commandlineoptions.cpp \
+-    other/aboutdialog.cpp \
+-    plugins/plugins.cpp \
+-    plugins/pluginproxy.cpp \
+-    tools/clickablelabel.cpp \
+-    downloads/downloadoptionsdialog.cpp \
+-    tools/treewidget.cpp \
+-    bookmarks/bookmarkswidget.cpp \
+-    tools/frame.cpp \
+-    bookmarks/bookmarksmodel.cpp \
+-    sidebar/sidebar.cpp \
+-    webview/siteinfowidget.cpp \
+-    plugins/clicktoflash.cpp \
+-    plugins/webpluginfactory.cpp \
+-    downloads/downloaditem.cpp \
+-    3rdparty/ecwin7.cpp \
+-    webview/webtab.cpp \
+-    rss/rsswidget.cpp \
+-    autofill/autofillnotification.cpp \
+-    rss/rssnotification.cpp \
+-    preferences/sslmanager.cpp \
+-    tools/animatedwidget.cpp \
+-    tools/htmlhighlighter.cpp \
+-    other/sourceviewersearch.cpp \
+-    adblock/adblocksubscription.cpp \
+-    adblock/adblockrule.cpp \
+-    adblock/adblockmanager.cpp \
+-    adblock/adblockdialog.cpp \
+-    adblock/adblockblockednetworkreply.cpp \
+-    adblock/adblockicon.cpp \
+-    tools/docktitlebarwidget.cpp \
+-    sidebar/bookmarkssidebar.cpp \
+-    bookmarks/bookmarkicon.cpp \
+-    sidebar/historysidebar.cpp \
+-    desktopnotifications/desktopnotification.cpp \
+-    desktopnotifications/desktopnotificationsfactory.cpp \
+-    tools/progressbar.cpp \
+-    tools/iconprovider.cpp \
+-    network/networkproxyfactory.cpp \
+-    tools/closedtabsmanager.cpp \
+-    other/statusbarmessage.cpp \
+-    tools/buttonbox.cpp \
+-    tools/widget.cpp \
+-    3rdparty/squeezelabelv2.cpp \
+-    3rdparty/squeezelabelv1.cpp \
+-    tools/buttonwithmenu.cpp \
+-    other/browsinglibrary.cpp \
+-    3rdparty/stylehelper.cpp \
+-    3rdparty/fancytabwidget.cpp \
+-    history/webhistoryinterface.cpp \
+-    tools/toolbutton.cpp \
+-    navigation/navigationbar.cpp \
+-    navigation/reloadstopbutton.cpp \
+-    preferences/thememanager.cpp \
+-    tools/globalfunctions.cpp \
+-    other/pagescreen.cpp \
+-    downloads/downloadfilehelper.cpp \
+-    tools/certificateinfowidget.cpp \
+-    webview/webinspectordockwidget.cpp \
+-    app/profileupdater.cpp \
+-    preferences/acceptlanguage.cpp \
+-    opensearch/opensearchreader.cpp \
+-    opensearch/opensearchengine.cpp \
+-    opensearch/opensearchenginedelegate.cpp \
+-    opensearch/searchenginesmanager.cpp \
+-    opensearch/searchenginesdialog.cpp \
+-    opensearch/editsearchengine.cpp \
+-    bookmarksimport/firefoximporter.cpp \
+-    bookmarksimport/chromeimporter.cpp \
+-    bookmarksimport/operaimporter.cpp \
+-    bookmarksimport/bookmarksimportdialog.cpp \
+-    tools/iconfetcher.cpp \
+-    tools/followredirectreply.cpp \
+-    webview/webhistorywrapper.cpp \
+-    tools/pagethumbnailer.cpp \
+-    plugins/speeddial.cpp \
+-    other/databasewriter.cpp \
+-    bookmarksimport/htmlimporter.cpp \
+-    tools/enhancedmenu.cpp \
+-    navigation/siteicon.cpp \
+-    navigation/goicon.cpp \
+-    rss/rssicon.cpp \
+-    navigation/downicon.cpp \
+-    network/cabundleupdater.cpp \
+-    app/settings.cpp \
+-    app/proxystyle.cpp \
+-    popupwindow/popupwebpage.cpp \
+-    popupwindow/popupwebview.cpp \
+-    popupwindow/popupwindow.cpp \
+-    popupwindow/popuplocationbar.cpp \
+-    webview/tabbedwebview.cpp \
+-    webview/webview.cpp \
+-    preferences/pluginlistdelegate.cpp \
+-    popupwindow/popupstatusbarmessage.cpp \
+-    other/licenseviewer.cpp \
+-    bookmarksimport/bookmarksimporticonfetcher.cpp \
+-    other/checkboxdialog.cpp \
+-    tools/plaineditwithlines.cpp \
+-    tools/focusselectlineedit.cpp \
+-    navigation/completer/locationcompleterdelegate.cpp \
+-    navigation/completer/locationcompleter.cpp \
+-    navigation/completer/locationcompletermodel.cpp \
+-    navigation/completer/locationcompleterview.cpp \
+-    history/history.cpp \
+-    history/historymodel.cpp \
+-    history/historyview.cpp \
+-    history/historyitem.cpp \
+-    tools/headerview.cpp \
+-    other/iconchooser.cpp \
+-    adblock/adblocktreewidget.cpp \
+-    adblock/adblockaddsubscriptiondialog.cpp \
+-    tools/emptynetworkreply.cpp \
+-    3rdparty/processinfo.cpp \
+-    preferences/pluginsmanager.cpp \
+-    other/qzsettings.cpp \
+-    other/useragentmanager.cpp \
+-    preferences/useragentdialog.cpp \
+-    session/recoverywidget.cpp \
+-    session/restoremanager.cpp \
+-    network/schemehandlers/qupzillaschemehandler.cpp \
+-    network/schemehandlers/adblockschemehandler.cpp \
+-    network/schemehandlers/fileschemehandler.cpp
++    tabpreview.cpp \
++    qtwin.cpp \
++    lineedit.cpp \
++    qupzilla.cpp \
++    mainapplication.cpp \
++    autosaver.cpp \
++    autofillmodel.cpp \
++    autofillmanager.cpp \
++    bookmarkstoolbar.cpp \
++    bookmarksmanager.cpp \
++    cookiemanager.cpp \
++    cookiejar.cpp \
++    downloadmanager.cpp \
++    historymanager.cpp \
++    websearchbar.cpp \
++    locationbar.cpp \
++    locationbarpopup.cpp \
++    networkmanagerproxy.cpp \
++    networkmanager.cpp \
++    updater.cpp \
++    sourceviewer.cpp \
++    preferences.cpp \
++    rssmanager.cpp \
++    clearprivatedata.cpp \
++    webpage.cpp \
++    tabwidget.cpp \
++    tabbar.cpp \
++    siteinfo.cpp \
++    searchtoolbar.cpp \
++    commandlineoptions.cpp \
++    aboutdialog.cpp \
++    plugins.cpp \
++    pluginproxy.cpp \
++    clickablelabel.cpp \
++    downloadoptionsdialog.cpp \
++    treewidget.cpp \
++    bookmarkswidget.cpp \
++    frame.cpp \
++    bookmarksmodel.cpp \
++    sidebar.cpp \
++    siteinfowidget.cpp \
++    clicktoflash.cpp \
++    webpluginfactory.cpp \
++    downloaditem.cpp \
++    ecwin7.cpp \
++    webtab.cpp \
++    rsswidget.cpp \
++    autofillnotification.cpp \
++    rssnotification.cpp \
++    sslmanager.cpp \
++    animatedwidget.cpp \
++    htmlhighlighter.cpp \
++    sourceviewersearch.cpp \
++    adblocksubscription.cpp \
++    adblockrule.cpp \
++    adblockmanager.cpp \
++    adblockdialog.cpp \
++    adblockblockednetworkreply.cpp \
++    adblockicon.cpp \
++    docktitlebarwidget.cpp \
++    bookmarkssidebar.cpp \
++    bookmarkicon.cpp \
++    historysidebar.cpp \
++    desktopnotification.cpp \
++    desktopnotificationsfactory.cpp \
++    progressbar.cpp \
++    iconprovider.cpp \
++    networkproxyfactory.cpp \
++    closedtabsmanager.cpp \
++    statusbarmessage.cpp \
++    buttonbox.cpp \
++    widget.cpp \
++    squeezelabelv2.cpp \
++    squeezelabelv1.cpp \
++    buttonwithmenu.cpp \
++    browsinglibrary.cpp \
++    stylehelper.cpp \
++    fancytabwidget.cpp \
++    webhistoryinterface.cpp \
++    toolbutton.cpp \
++    navigationbar.cpp \
++    reloadstopbutton.cpp \
++    thememanager.cpp \
++    globalfunctions.cpp \
++    downloadfilehelper.cpp \
++    certificateinfowidget.cpp \
++    webinspectordockwidget.cpp \
++    profileupdater.cpp \
++    acceptlanguage.cpp \
++    opensearchreader.cpp \
++    opensearchengine.cpp \
++    opensearchenginedelegate.cpp \
++    searchenginesmanager.cpp \
++    searchenginesdialog.cpp \
++    editsearchengine.cpp \
++    firefoximporter.cpp \
++    chromeimporter.cpp \
++    operaimporter.cpp \
++    bookmarksimportdialog.cpp \
++    iconfetcher.cpp \
++    followredirectreply.cpp \
++    webhistorywrapper.cpp \
++    pagethumbnailer.cpp \
++    speeddial.cpp \
++    databasewriter.cpp \
++    htmlimporter.cpp \
++    enhancedmenu.cpp \
++    siteicon.cpp \
++    goicon.cpp \
++    rssicon.cpp \
++    downicon.cpp \
++    cabundleupdater.cpp \
++    settings.cpp \
++    proxystyle.cpp \
++    popupwebpage.cpp \
++    popupwebview.cpp \
++    popupwindow.cpp \
++    popuplocationbar.cpp \
++    tabbedwebview.cpp \
++    webview.cpp \
++    pluginlistdelegate.cpp \
++    popupstatusbarmessage.cpp \
++    licenseviewer.cpp \
++    bookmarksimporticonfetcher.cpp \
++    checkboxdialog.cpp \
++    plaineditwithlines.cpp \
++    focusselectlineedit.cpp \
++    locationcompleterdelegate.cpp \
++    locationcompleter.cpp \
++    locationcompletermodel.cpp \
++    locationcompleterview.cpp \
++    history.cpp \
++    historymodel.cpp \
++    historyview.cpp \
++    historyitem.cpp \
++    headerview.cpp \
++    iconchooser.cpp \
++    adblocktreewidget.cpp \
++    adblockaddsubscriptiondialog.cpp \
++    emptynetworkreply.cpp \
++    processinfo.cpp \
++    pluginsmanager.cpp \
++    qzsettings.cpp \
++    useragentmanager.cpp \
++    useragentdialog.cpp \
++    recoverywidget.cpp \
++    restoremanager.cpp \
++    qupzillaschemehandler.cpp \
++    adblockschemehandler.cpp \
++    fileschemehandler.cpp
++
+ 
+ HEADERS  += \
+-    webview/tabpreview.h \
+-    3rdparty/qtwin.h \
+-    3rdparty/lineedit.h \
+-    app/qupzilla.h \
+-    app/mainapplication.h \
+-    app/autosaver.h \
+-    autofill/autofillmodel.h \
+-    preferences/autofillmanager.h \
+-    bookmarks/bookmarkstoolbar.h \
+-    bookmarks/bookmarksmanager.h \
+-    cookies/cookiemanager.h \
+-    cookies/cookiejar.h \
+-    downloads/downloadmanager.h \
+-    history/historymanager.h \
+-    navigation/websearchbar.h \
+-    navigation/locationbar.h \
+-    network/networkmanagerproxy.h \
+-    network/networkmanager.h \
+-    other/updater.h \
+-    other/sourceviewer.h \
+-    preferences/preferences.h \
+-    rss/rssmanager.h \
+-    other/clearprivatedata.h \
+-    webview/webpage.h \
+-    webview/tabwidget.h \
+-    webview/tabbar.h \
+-    webview/siteinfo.h \
+-    webview/searchtoolbar.h \
+-    app/commandlineoptions.h \
+-    other/aboutdialog.h \
+-    plugins/plugininterface.h \
+-    plugins/plugins.h \
+-    plugins/pluginproxy.h \
+-    tools/clickablelabel.h \
+-    downloads/downloadoptionsdialog.h \
+-    tools/treewidget.h \
+-    bookmarks/bookmarkswidget.h \
+-    tools/frame.h \
+-    bookmarks/bookmarksmodel.h \
+-    sidebar/sidebar.h \
+-    webview/siteinfowidget.h \
+-    plugins/clicktoflash.h \
+-    plugins/webpluginfactory.h \
+-    downloads/downloaditem.h \
+-    3rdparty/ecwin7.h \
+-    webview/webtab.h \
+-    rss/rsswidget.h \
+-    autofill/autofillnotification.h \
+-    rss/rssnotification.h \
+-    preferences/sslmanager.h \
+-    tools/animatedwidget.h \
+-    tools/htmlhighlighter.h \
+-    other/sourceviewersearch.h \
+-    adblock/adblocksubscription.h \
+-    adblock/adblockrule.h \
+-    adblock/adblockmanager.h \
+-    adblock/adblockdialog.h \
+-    adblock/adblockblockednetworkreply.h \
+-    adblock/adblockicon.h \
+-    tools/docktitlebarwidget.h \
+-    sidebar/bookmarkssidebar.h \
+-    bookmarks/bookmarkicon.h \
+-    sidebar/historysidebar.h \
+-    desktopnotifications/desktopnotification.h \
+-    desktopnotifications/desktopnotificationsfactory.h \
+-    tools/progressbar.h \
+-    tools/iconprovider.h \
+-    network/networkproxyfactory.h \
+-    tools/closedtabsmanager.h \
+-    other/statusbarmessage.h \
+-    tools/buttonbox.h \
+-    tools/widget.h \
+-    3rdparty/squeezelabelv2.h \
+-    3rdparty/squeezelabelv1.h \
+-    tools/buttonwithmenu.h \
+-    other/browsinglibrary.h \
+-    3rdparty/stylehelper.h \
+-    3rdparty/fancytabwidget.h \
+-    history/webhistoryinterface.h \
+-    tools/toolbutton.h \
+-    navigation/navigationbar.h \
+-    navigation/reloadstopbutton.h \
+-    preferences/thememanager.h \
+-    tools/globalfunctions.h \
+-    other/pagescreen.h \
+-    downloads/downloadfilehelper.h \
+-    tools/certificateinfowidget.h \
+-    webview/webinspectordockwidget.h \
+-    3rdparty/msvc2008.h \
+-    app/profileupdater.h \
+-    preferences/acceptlanguage.h \
+-    opensearch/opensearchreader.h \
+-    opensearch/opensearchengine.h \
+-    opensearch/opensearchenginedelegate.h \
+-    opensearch/searchenginesmanager.h \
+-    opensearch/searchenginesdialog.h \
+-    opensearch/editsearchengine.h \
+-    bookmarksimport/firefoximporter.h \
+-    bookmarksimport/chromeimporter.h \
+-    bookmarksimport/operaimporter.h \
+-    bookmarksimport/bookmarksimportdialog.h \
+-    tools/iconfetcher.h \
+-    tools/followredirectreply.h \
+-    webview/webhistorywrapper.h \
+-    tools/pagethumbnailer.h \
+-    plugins/speeddial.h \
+-    other/databasewriter.h \
+-    bookmarksimport/htmlimporter.h \
+-    tools/enhancedmenu.h \
+-    navigation/siteicon.h \
+-    navigation/goicon.h \
+-    rss/rssicon.h \
+-    navigation/downicon.h \
+-    network/cabundleupdater.h \
+-    app/settings.h \
+-    app/proxystyle.h \
+-    popupwindow/popupwebpage.h \
+-    popupwindow/popupwebview.h \
+-    popupwindow/popupwindow.h \
+-    popupwindow/popuplocationbar.h \
+-    webview/tabbedwebview.h \
+-    webview/webview.h \
+-    app/qz_namespace.h \
+-    preferences/pluginlistdelegate.h \
+-    popupwindow/popupstatusbarmessage.h \
+-    other/licenseviewer.h \
+-    bookmarksimport/bookmarksimporticonfetcher.h \
+-    other/checkboxdialog.h \
+-    tools/plaineditwithlines.h \
+-    sidebar/sidebarinterface.h \
+-    tools/focusselectlineedit.h \
+-    navigation/completer/locationcompleterdelegate.h \
+-    navigation/completer/locationcompleter.h \
+-    navigation/completer/locationcompletermodel.h \
+-    navigation/completer/locationcompleterview.h \
+-    history/history.h \
+-    history/historymodel.h \
+-    history/historyview.h \
+-    history/historyitem.h \
+-    tools/headerview.h \
+-    other/iconchooser.h \
+-    adblock/adblocktreewidget.h \
+-    adblock/adblockaddsubscriptiondialog.h \
+-    tools/emptynetworkreply.h \
+-    3rdparty/processinfo.h \
+-    preferences/pluginsmanager.h \
+-    other/qzsettings.h \
+-    other/useragentmanager.h \
+-    preferences/useragentdialog.h \
+-    session/recoverywidget.h \
+-    session/restoremanager.h \
+-    network/schemehandlers/schemehandler.h \
+-    network/schemehandlers/qupzillaschemehandler.h \
+-    network/schemehandlers/adblockschemehandler.h \
+-    network/schemehandlers/fileschemehandler.h
++    tabpreview.h \
++    qtwin.h \
++    lineedit.h \
++    qupzilla.h \
++    mainapplication.h \
++    autosaver.h \
++    autofillmodel.h \
++    autofillmanager.h \
++    bookmarkstoolbar.h \
++    bookmarksmanager.h \
++    cookiemanager.h \
++    cookiejar.h \
++    downloadmanager.h \
++    historymanager.h \
++    websearchbar.h \
++    locationbar.h \
++    networkmanagerproxy.h \
++    networkmanager.h \
++    updater.h \
++    sourceviewer.h \
++    preferences.h \
++    rssmanager.h \
++    clearprivatedata.h \
++    webpage.h \
++    tabwidget.h \
++    tabbar.h \
++    siteinfo.h \
++    searchtoolbar.h \
++    commandlineoptions.h \
++    aboutdialog.h \
++    plugininterface.h \
++    plugins.h \
++    pluginproxy.h \
++    clickablelabel.h \
++    downloadoptionsdialog.h \
++    treewidget.h \
++    bookmarkswidget.h \
++    frame.h \
++    bookmarksmodel.h \
++    sidebar.h \
++    siteinfowidget.h \
++    clicktoflash.h \
++    webpluginfactory.h \
++    downloaditem.h \
++    ecwin7.h \
++    webtab.h \
++    rsswidget.h \
++    autofillnotification.h \
++    rssnotification.h \
++    sslmanager.h \
++    animatedwidget.h \
++    htmlhighlighter.h \
++    sourceviewersearch.h \
++    adblocksubscription.h \
++    adblockrule.h \
++    adblockmanager.h \
++    adblockdialog.h \
++    adblockblockednetworkreply.h \
++    adblockicon.h \
++    docktitlebarwidget.h \
++    bookmarkssidebar.h \
++    bookmarkicon.h \
++    historysidebar.h \
++    desktopnotification.h \
++    desktopnotificationsfactory.h \
++    progressbar.h \
++    iconprovider.h \
++    networkproxyfactory.h \
++    closedtabsmanager.h \
++    statusbarmessage.h \
++    buttonbox.h \
++    widget.h \
++    squeezelabelv2.h \
++    squeezelabelv1.h \
++    buttonwithmenu.h \
++    browsinglibrary.h \
++    stylehelper.h \
++    fancytabwidget.h \
++    webhistoryinterface.h \
++    toolbutton.h \
++    navigationbar.h \
++    reloadstopbutton.h \
++    thememanager.h \
++    globalfunctions.h \
++    downloadfilehelper.h \
++    certificateinfowidget.h \
++    webinspectordockwidget.h \
++    msvc2008.h \
++    profileupdater.h \
++    acceptlanguage.h \
++    opensearchreader.h \
++    opensearchengine.h \
++    opensearchenginedelegate.h \
++    searchenginesmanager.h \
++    searchenginesdialog.h \
++    editsearchengine.h \
++    firefoximporter.h \
++    chromeimporter.h \
++    operaimporter.h \
++    bookmarksimportdialog.h \
++    iconfetcher.h \
++    followredirectreply.h \
++    webhistorywrapper.h \
++    pagethumbnailer.h \
++    speeddial.h \
++    databasewriter.h \
++    htmlimporter.h \
++    enhancedmenu.h \
++    siteicon.h \
++    goicon.h \
++    rssicon.h \
++    downicon.h \
++    cabundleupdater.h \
++    settings.h \
++    proxystyle.h \
++    popupwebpage.h \
++    popupwebview.h \
++    popupwindow.h \
++    popuplocationbar.h \
++    tabbedwebview.h \
++    webview.h \
++    qz_namespace.h \
++    pluginlistdelegate.h \
++    popupstatusbarmessage.h \
++    licenseviewer.h \
++    bookmarksimporticonfetcher.h \
++    checkboxdialog.h \
++    plaineditwithlines.h \
++    sidebarinterface.h \
++    focusselectlineedit.h \
++    locationcompleterdelegate.h \
++    locationcompleter.h \
++    locationcompletermodel.h \
++    locationcompleterview.h \
++    history.h \
++    historymodel.h \
++    historyview.h \
++    historyitem.h \
++    headerview.h \
++    iconchooser.h \
++    adblocktreewidget.h \
++    adblockaddsubscriptiondialog.h \
++    emptynetworkreply.h \
++    processinfo.h \
++    pluginsmanager.h \
++    qzsettings.h \
++    useragentmanager.h \
++    useragentdialog.h \
++    recoverywidget.h \
++    restoremanager.h \
++    schemehandler.h \
++    qupzillaschemehandler.h \
++    adblockschemehandler.h \
++    fileschemehandler.h
++
+ 
+ FORMS    += \
+-    preferences/autofillmanager.ui \
+-    bookmarks/bookmarksmanager.ui \
+-    cookies/cookiemanager.ui \
+-    history/historymanager.ui \
+-    preferences/preferences.ui \
+-    rss/rssmanager.ui \
+-    webview/siteinfo.ui \
+-    other/aboutdialog.ui \
+-    preferences/pluginslist.ui \
+-    downloads/downloadoptionsdialog.ui \
+-    bookmarks/bookmarkswidget.ui \
+-    webview/siteinfowidget.ui \
+-    downloads/downloaditem.ui \
+-    downloads/downloadmanager.ui \
+-    rss/rsswidget.ui \
+-    autofill/autofillnotification.ui \
+-    rss/rssnotification.ui \
+-    preferences/sslmanager.ui \
+-    other/clearprivatedata.ui \
+-    other/sourceviewersearch.ui \
+-    adblock/adblockdialog.ui \
+-    tools/docktitlebarwidget.ui \
+-    sidebar/bookmarkssidebar.ui \
+-    sidebar/historysidebar.ui \
+-    desktopnotifications/desktopnotification.ui \
+-    webview/jsconfirm.ui \
+-    webview/jsalert.ui \
+-    webview/jsprompt.ui \
+-    other/browsinglibrary.ui \
+-    webview/searchtoolbar.ui \
+-    preferences/thememanager.ui \
+-    other/pagescreen.ui \
+-    tools/certificateinfowidget.ui \
+-    preferences/acceptlanguage.ui \
+-    preferences/addacceptlanguage.ui \
+-    opensearch/searchenginesdialog.ui \
+-    opensearch/editsearchengine.ui \
+-    bookmarksimport/bookmarksimportdialog.ui \
+-    other/checkboxdialog.ui \
+-    other/iconchooser.ui \
+-    adblock/adblockaddsubscriptiondialog.ui \
+-    preferences/useragentdialog.ui \
+-    session/recoverywidget.ui
++    autofillmanager.ui \
++    bookmarksmanager.ui \
++    cookiemanager.ui \
++    historymanager.ui \
++    preferences.ui \
++    rssmanager.ui \
++    siteinfo.ui \
++    aboutdialog.ui \
++    pluginslist.ui \
++    downloadoptionsdialog.ui \
++    bookmarkswidget.ui \
++    siteinfowidget.ui \
++    downloaditem.ui \
++    downloadmanager.ui \
++    rsswidget.ui \
++    autofillnotification.ui \
++    rssnotification.ui \
++    sslmanager.ui \
++    clearprivatedata.ui \
++    sourceviewersearch.ui \
++    adblockdialog.ui \
++    docktitlebarwidget.ui \
++    bookmarkssidebar.ui \
++    historysidebar.ui \
++    desktopnotification.ui \
++    jsconfirm.ui \
++    jsalert.ui \
++    jsprompt.ui \
++    browsinglibrary.ui \
++    searchtoolbar.ui \
++    thememanager.ui \
++    certificateinfowidget.ui \
++    acceptlanguage.ui \
++    addacceptlanguage.ui \
++    searchenginesdialog.ui \
++    editsearchengine.ui \
++    bookmarksimportdialog.ui \
++    checkboxdialog.ui \
++    iconchooser.ui \
++    adblockaddsubscriptiondialog.ui \
++    useragentdialog.ui \
++    recoverywidget.ui
+ 
+-RESOURCES += \
+-    data/icons.qrc \
+-    data/html.qrc \
+-    data/data.qrc
+ 
+-!mac:unix {
+-    target.path = $$library_folder
++RESOURCES += \
++    icons.qrc \
++    html.qrc \
++    data.qrc \
++    theme.qrc
+ 
+-    INSTALLS += target
+-}
++#!mac:unix {
++#    target.path = $$library_folder
++#
++#    INSTALLS += target
++#}
+ 
+-message(===========================================)
+-message( Using following defines:)
+-message(  $$DEFINES)
++#message(===========================================)
++#message( Using following defines:)
++#message(  $$DEFINES)
+diff --git a/src/lib/webview/webpage.cpp b/src/lib/webview/webpage.cpp
+index 8bb07dc..9ba1e30 100644
+--- a/src/lib/webview/webpage.cpp
++++ b/src/lib/webview/webpage.cpp
+@@ -87,7 +87,7 @@ WebPage::WebPage(QupZilla* mainClass)
+     connect(this, SIGNAL(unsupportedContent(QNetworkReply*)), this, SLOT(handleUnsupportedContent(QNetworkReply*)));
+     connect(this, SIGNAL(loadProgress(int)), this, SLOT(progress(int)));
+     connect(this, SIGNAL(loadFinished(bool)), this, SLOT(finished()));
+-    connect(this, SIGNAL(printRequested(QWebFrame*)), this, SLOT(printFrame(QWebFrame*)));
++//    connect(this, SIGNAL(printRequested(QWebFrame*)), this, SLOT(printFrame(QWebFrame*)));
+     connect(this, SIGNAL(downloadRequested(QNetworkRequest)), this, SLOT(downloadRequested(QNetworkRequest)));
+     connect(this, SIGNAL(windowCloseRequested()), this, SLOT(windowCloseRequested()));
+ 
+@@ -243,15 +243,15 @@ void WebPage::watchedFileChanged(const QString &file)
+     }
+ }
+ 
+-void WebPage::printFrame(QWebFrame* frame)
+-{
+-    WebView* webView = qobject_cast<WebView*>(view());
+-    if (!webView) {
+-        return;
+-    }
+-
+-    webView->printPage(frame);
+-}
++//void WebPage::printFrame(QWebFrame* frame)
++//{
++//    WebView* webView = qobject_cast<WebView*>(view());
++//    if (!webView) {
++//        return;
++//    }
++//
++//    webView->printPage(frame);
++//}
+ 
+ void WebPage::addJavaScriptObject()
+ {
+diff --git a/src/lib/webview/webpage.h b/src/lib/webview/webpage.h
+index 2ad6353..c6618ba 100644
+--- a/src/lib/webview/webpage.h
++++ b/src/lib/webview/webpage.h
+@@ -94,7 +94,7 @@ private slots:
+     void addJavaScriptObject();
+ 
+     void watchedFileChanged(const QString &file);
+-    void printFrame(QWebFrame* frame);
++//    void printFrame(QWebFrame* frame);
+     void downloadRequested(const QNetworkRequest &request);
+     void windowCloseRequested();
+ 
+diff --git a/src/lib/webview/webview.cpp b/src/lib/webview/webview.cpp
+index 9a39d1d..d9dc9a9 100644
+--- a/src/lib/webview/webview.cpp
++++ b/src/lib/webview/webview.cpp
+@@ -583,10 +583,10 @@ void WebView::reloadClickedFrame()
+     m_clickedFrame->load(frameUrl);
+ }
+ 
+-void WebView::printClickedFrame()
+-{
+-    printPage(m_clickedFrame);
+-}
++//void WebView::printClickedFrame()
++//{
++//    printPage(m_clickedFrame);
++//}
+ 
+ void WebView::clickedFrameZoomIn()
+ {
+@@ -618,21 +618,21 @@ void WebView::showClickedFrameSource()
+     showSource(m_clickedFrame);
+ }
+ 
+-void WebView::printPage(QWebFrame* frame)
+-{
+-    QPrintPreviewDialog* dialog = new QPrintPreviewDialog(this);
+-    dialog->resize(800, 750);
+-
+-    if (!frame) {
+-        connect(dialog, SIGNAL(paintRequested(QPrinter*)), this, SLOT(print(QPrinter*)));
+-    }
+-    else {
+-        connect(dialog, SIGNAL(paintRequested(QPrinter*)), frame, SLOT(print(QPrinter*)));
+-    }
+-
+-    dialog->exec();
+-    dialog->deleteLater();
+-}
++//void WebView::printPage(QWebFrame* frame)
++//{
++//    QPrintPreviewDialog* dialog = new QPrintPreviewDialog(this);
++//    dialog->resize(800, 750);
++//
++//    if (!frame) {
++//        connect(dialog, SIGNAL(paintRequested(QPrinter*)), this, SLOT(print(QPrinter*)));
++//    }
++//    else {
++//        connect(dialog, SIGNAL(paintRequested(QPrinter*)), frame, SLOT(print(QPrinter*)));
++//    }
++//
++//    dialog->exec();
++//    dialog->deleteLater();
++//}
+ 
+ QUrl WebView::lastUrl()
+ {
+@@ -789,7 +789,7 @@ void WebView::createPageContextMenu(QMenu* menu, const QPoint &pos)
+         frameMenu->addAction(QIcon(":/icons/menu/popup.png"), tr("Show this frame in new &tab"), this, SLOT(loadClickedFrameInNewTab()));
+         frameMenu->addSeparator();
+         frameMenu->addAction(qIconProvider->standardIcon(QStyle::SP_BrowserReload), tr("&Reload"), this, SLOT(reloadClickedFrame()));
+-        frameMenu->addAction(QIcon::fromTheme("document-print"), tr("Print frame"), this, SLOT(printClickedFrame()));
++//        frameMenu->addAction(QIcon::fromTheme("document-print"), tr("Print frame"), this, SLOT(printClickedFrame()));
+         frameMenu->addSeparator();
+         frameMenu->addAction(QIcon::fromTheme("zoom-in"), tr("Zoom &in"), this, SLOT(clickedFrameZoomIn()));
+         frameMenu->addAction(QIcon::fromTheme("zoom-out"), tr("&Zoom out"), this, SLOT(clickedFrameZoomOut()));
+@@ -805,7 +805,7 @@ void WebView::createPageContextMenu(QMenu* menu, const QPoint &pos)
+     menu->addAction(QIcon::fromTheme("document-save"), tr("&Save page as..."), this, SLOT(savePageAs()));
+     menu->addAction(QIcon::fromTheme("edit-copy"), tr("&Copy page link"), this, SLOT(copyLinkToClipboard()))->setData(url());
+     menu->addAction(QIcon::fromTheme("mail-message-new"), tr("Send page link..."), this, SLOT(sendPageByMail()));
+-    menu->addAction(QIcon::fromTheme("document-print"), tr("&Print page"), this, SLOT(printPage()));
++//    menu->addAction(QIcon::fromTheme("document-print"), tr("&Print page"), this, SLOT(printPage()));
+     menu->addSeparator();
+     menu->addAction(QIcon::fromTheme("edit-select-all"), tr("Select &all"), this, SLOT(selectAll()));
+     menu->addSeparator();
+diff --git a/src/lib/webview/webview.h b/src/lib/webview/webview.h
+index 058dd5c..a813abb 100644
+--- a/src/lib/webview/webview.h
++++ b/src/lib/webview/webview.h
+@@ -72,7 +72,7 @@ public slots:
+     void forward();
+ 
+     void selectAll();
+-    void printPage(QWebFrame* frame = 0);
++//    void printPage(QWebFrame* frame = 0);
+     void sendPageByMail();
+     void savePageAs();
+ 
+@@ -112,7 +112,7 @@ protected slots:
+     void loadClickedFrame();
+     void loadClickedFrameInNewTab();
+     void reloadClickedFrame();
+-    void printClickedFrame();
++//    void printClickedFrame();
+     void clickedFrameZoomIn();
+     void clickedFrameZoomOut();
+     void clickedFrameZoomReset();
+diff --git a/src/main/main.pro b/src/main/main.pro
+index b119724..d4c8b73 100644
+--- a/src/main/main.pro
++++ b/src/main/main.pro
+@@ -1,29 +1,30 @@
+ QT += core gui webkit sql network script
+ 
+ TARGET = qupzilla
+-mac: TARGET = QupZilla
++#mac: TARGET = QupZilla
+ 
+ TEMPLATE = app
+ 
+-!unix|mac: LIBS += -L../../bin -lQupZilla
+-!mac:unix: LIBS += ../../bin/libQupZilla.so
++#!unix|mac: LIBS += -L../../bin -lQupZilla
++#!mac:unix: LIBS += ../../bin/libQupZilla.so
+ 
+-include(../defines.pri)
+-include(../install.pri)
++include $(REP_DIR)/contrib/$(QUPZILLA)/src/defines.pri
++#include(../install.pri)
++include $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/lib.pro
+ 
+-unix:!contains(DEFINES, "DISABLE_DBUS") QT += dbus
++#unix:!contains(DEFINES, "DISABLE_DBUS") QT += dbus
+ 
+-INCLUDEPATH += ../lib/app\
+-               ../lib/3rdparty\
+-               ../lib/session\
+-               ../lib/webview
++INCLUDEPATH += $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/app\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/3rdparty\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/session\
++               $(REP_DIR)/contrib/$(QUPZILLA)/src/lib/webview
+ 
+-SOURCES =      main.cpp
++SOURCES +=      main.cpp
+ OTHER_FILES += appicon.rc \
+                appicon_os2.rc \
+                Info.plist
+ 
+-os2:RC_FILE = appicon_os2.rc
+-win32:RC_FILE = appicon.rc
++#os2:RC_FILE = appicon_os2.rc
++#win32:RC_FILE = appicon.rc
+ 
+-unix:contains(DEFINES, "NO_SYSTEM_DATAPATH"): QMAKE_LFLAGS+=$${QMAKE_LFLAGS_RPATH}\\$\$ORIGIN
++#unix:contains(DEFINES, "NO_SYSTEM_DATAPATH"): QMAKE_LFLAGS+=$${QMAKE_LFLAGS_RPATH}\\$\$ORIGIN
+diff --git a/src/plugins.pri b/src/plugins.pri
+index 3c28e6c..6b25e9e 100644
+--- a/src/plugins.pri
++++ b/src/plugins.pri
+@@ -35,8 +35,8 @@ MOC_DIR = build
+ RCC_DIR = build
+ UI_DIR = build
+ 
+-!unix|mac: LIBS += -L$$PWD/../bin -lQupZilla
+-!mac:unix: LIBS += $$PWD/../bin/libQupZilla.so
++#!unix|mac: LIBS += -L$$PWD/../bin -lQupZilla
++#!mac:unix: LIBS += $$PWD/../bin/libQupZilla.so
+ 
+ !mac:unix {
+     target.path = $$library_folder/qupzilla

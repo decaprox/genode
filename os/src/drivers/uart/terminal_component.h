@@ -66,11 +66,11 @@ namespace Terminal {
 			 * Constructor
 			 */
 			Session_component(Terminal::Driver_factory &driver_factory,
-			                  unsigned index)
+			                  unsigned index, unsigned baudrate)
 			:
 				_io_buffer(Genode::env()->ram_session(), IO_BUFFER_SIZE),
 				_driver_factory(driver_factory),
-				_driver(*_driver_factory.create(index, _char_avail_callback))
+				_driver(*_driver_factory.create(index, baudrate, _char_avail_callback))
 			{ }
 
 
@@ -129,6 +129,8 @@ namespace Terminal {
 
 			Genode::size_t read(void *, Genode::size_t) { return 0; }
 			Genode::size_t write(void const *, Genode::size_t) { return 0; }
+
+			bool set_baudrate(int baud) { return _driver.set_baudrate(baud); }
 	};
 
 
@@ -150,8 +152,18 @@ namespace Terminal {
 
 					unsigned uart_index = 0;
 					policy.attribute("uart").value(&uart_index);
+
+					unsigned uart_baudrate = 0;
+					try {
+						policy.attribute("baudrate").value(&uart_baudrate);
+					} catch (Xml_node::Nonexistent_attribute) {
+						PDBG("Missing \"baudrate\" attribute in policy definition");
+					}
+
+					PDBG("UART%d %d", uart_index, uart_baudrate);
+
 					return new (md_alloc())
-					       Session_component(_driver_factory, uart_index);
+						Session_component(_driver_factory, uart_index, uart_baudrate);
 
 				} catch (Xml_node::Nonexistent_attribute) {
 					PERR("Missing \"uart\" attribute in policy definition");
