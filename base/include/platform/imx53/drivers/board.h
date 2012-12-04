@@ -103,6 +103,11 @@ namespace Genode
 			AIPS_1_MMIO_BASE   = 0x53f00000,
 			AIPS_2_MMIO_BASE   = 0x63f00000,
 
+			IPU_ERR_IRQ        = 10,
+			IPU_SYNC_IRQ       = 11,
+			IPU_BASE           = 0x18000000,
+			IPU_SIZE           = 0x08000000,
+
 			SECURITY_EXTENSION = 1,
 		};
 
