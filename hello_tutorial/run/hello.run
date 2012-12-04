@@ -15,6 +15,10 @@ install_config {
 	<parent-provides>
 		<service name="CAP"/>
 		<service name="LOG"/>
+		<service name="RAM"/>
+		<service name="IO_MEM"/>
+		<service name="IRQ"/>
+        <service name="RM"/>
 	</parent-provides>
 	<default-route>
 		<any-service> <parent/> <any-child/> </any-service>
