@@ -1,7 +1,7 @@
 /*
  * \brief  I2C session interface
- * \author Alexander Tarasikov <alexander.tarasikov@gmail.com>
- * \author Nikolay Golikov
+ * \author Alexander Tarasikov <tarasikov@ksyslabs.org>
+ * \author Nikolay Golikov <nik@ksyslabs.org>
  * \date   2012-11-30
  */
 

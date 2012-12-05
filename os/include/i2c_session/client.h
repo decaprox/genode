@@ -1,6 +1,6 @@
 /*
  * \brief  Client-side i2c interface
- * \author Alexander Tarasikov <alexander.tarasikov@gmail.com>
+ * \author Alexander Tarasikov <tarasikov@ksyslabs.org>
  * \author Nikolay Golikov
  * \date   2012-11-30
  */

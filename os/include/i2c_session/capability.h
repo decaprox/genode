@@ -1,6 +1,6 @@
 /*
  * \brief  I2C bus driver session capability type
- * \author Alexander Tarasikov <alexander.tarasikov@gmail.com>
+ * \author Alexander Tarasikov <tarasikov@ksyslabs.org> 
  * \date   2012-09-18
  */
 

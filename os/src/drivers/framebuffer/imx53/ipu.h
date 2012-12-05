@@ -1,7 +1,15 @@
 /*
  * \brief  Image Processing Utit registers
- * \author Nikolay Golikov
+ * \author Nikolay Golikov <nik@ksyslabs.org>
  * \date   2012-11-10
+ */
+
+/*
+ * Copyright (C) 2012 Ksys Labs LLC
+ * Copyright (C) 2012 Genode Labs GmbH
+ *
+ * This file is part of the Genode OS framework, which is distributed
+ * under the terms of the GNU General Public License version 2.
  */
 
 #ifndef _IPU_H_
