@@ -108,6 +108,12 @@ namespace Genode
 			IPU_BASE           = 0x18000000,
 			IPU_SIZE           = 0x08000000,
 
+			SRC_BASE           = 0x53fd0000,
+			SRC_SIZE           = 0x00004000,
+
+			CCM_BASE           = 0x53FD4000,
+			CCM_SIZE           = 0x00004000,
+
 			SECURITY_EXTENSION = 1,
 		};
 

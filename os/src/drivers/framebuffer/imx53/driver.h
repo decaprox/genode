@@ -20,6 +20,8 @@
 
 /* local includes */
 #include <ipu.h>
+#include <src.h>
+#include <ccm.h>
 
 
 namespace Framebuffer {
@@ -31,6 +33,13 @@ namespace Framebuffer {
 class Framebuffer::Driver
 {
 	private:
+		/* Clocks control module */
+		Attached_io_mem_dataspace _ccm_mmio;
+		Ccm                       _ccm;
+
+		/* System reset controller registers */
+		Attached_io_mem_dataspace _src_mmio;
+		Src                       _src;
 
 		/* Image processing unit memory */
 		Attached_io_mem_dataspace _ipu_mmio;
@@ -57,6 +66,12 @@ class Framebuffer::Driver
 
 		Driver()
 		:
+			_ccm_mmio(Board::CCM_BASE, Board::CCM_SIZE),
+			_ccm((addr_t)_ccm_mmio.local_addr<void>()),
+
+			_src_mmio(Board::SRC_BASE, Board::SRC_SIZE),
+			_src((addr_t)_src_mmio.local_addr<void>()),
+
 			_ipu_mmio(Board::IPU_BASE, Board::IPU_SIZE),
 			_ipu((addr_t)_ipu_mmio.local_addr<void>())
 		{ }
@@ -64,7 +79,12 @@ class Framebuffer::Driver
 
 		bool init(addr_t phys_base)
 		{
-			_ipu.init_idmac(23, WIDTH, HEIGHT, WIDTH * BYTES_PER_PIXEL, phys_base);
+			/* reset ipu over src */
+			_src.write<Src::Ctrl_reg::Ipu_rst>(1);
+	
+			_ccm.ipu_clk_enable();
+
+			_ipu.init(WIDTH, HEIGHT, WIDTH * BYTES_PER_PIXEL, phys_base);
 
 			return true;
 		}
