@@ -11,7 +11,7 @@ set build_components {
 }
 
 lappend_if [have_spec usb] build_components drivers/usb
-lappend_if [have_spec omap4] build_components drivers/gpio
+lappend_if [expr [have_spec omap4] || [have_spec imx53]] build_components drivers/gpio
 
 build $build_components
 
@@ -80,6 +80,13 @@ append_if [have_spec omap4] config {
 	</start>}
 
 append_if [have_spec imx53] config {
+	<start name="imx53_gpio_drv">
+		<resource name="RAM" quantum="4M"/>
+		<provides><service name="Gpio"/></provides>
+		<config/>
+	</start>}
+
+append_if [have_spec imx53] config {
 	<start name="imx53_fb_drv">
 		<resource name="RAM" quantum="4M"/>
 		<provides><service name="Framebuffer"/></provides>
@@ -140,6 +147,7 @@ lappend_if [have_spec ps2]   boot_modules ps2_drv
 lappend_if [have_spec pl11x] boot_modules pl11x_drv
 lappend_if [have_spec omap4] boot_modules omap4_gpio_drv
 lappend_if [have_spec omap4] boot_modules omap4_fb_drv
+lappend_if [have_spec imx53] boot_modules imx53_gpio_drv
 lappend_if [have_spec imx53] boot_modules imx53_fb_drv
 lappend_if [have_spec usb]   boot_modules usb_drv
 lappend_if [expr ![have_spec ps2] && ![have_spec usb]] boot_modules dummy_input_drv

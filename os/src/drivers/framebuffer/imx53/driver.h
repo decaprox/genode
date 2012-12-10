@@ -17,6 +17,7 @@
 #include <os/attached_io_mem_dataspace.h>
 #include <io_mem_session/connection.h>
 #include <util/mmio.h>
+#include <gpio_session/connection.h>
 
 /* local includes */
 #include <ipu.h>
@@ -45,6 +46,7 @@ class Framebuffer::Driver
 		Attached_io_mem_dataspace _ipu_mmio;
 		Ipu                       _ipu;
 
+		Gpio::Connection          _gpio;
 	public:
 
 		enum {
@@ -61,6 +63,9 @@ class Framebuffer::Driver
 			HSYNC_LEN        = 10,
 			BYTES_PER_PIXEL  = 2,
 			FRAMEBUFFER_SIZE = WIDTH * HEIGHT * BYTES_PER_PIXEL,
+
+			LCD_BL_GPIO      = 88,
+			LCD_CONT_GPIO    = 1,
 		};
 
 
@@ -85,6 +90,10 @@ class Framebuffer::Driver
 			_ccm.ipu_clk_enable();
 
 			_ipu.init(WIDTH, HEIGHT, WIDTH * BYTES_PER_PIXEL, phys_base);
+			
+			/* Turn on lcd power */
+			_gpio.direction_output(LCD_BL_GPIO, true);
+			_gpio.direction_output(LCD_CONT_GPIO, true);
 
 			return true;
 		}
