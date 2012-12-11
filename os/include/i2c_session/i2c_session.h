@@ -37,8 +37,8 @@ namespace I2C {
 		 *
 		 */
 		virtual bool read_byte(Genode::uint8_t address,
-			Genode::uint8_t register, Genode::uint8_t *out) = 0;
-		
+		                       Genode::uint8_t register, Genode::uint8_t *out) = 0;
+
 		/**
 		 * Write a single byte to the device
 		 *
@@ -48,7 +48,7 @@ namespace I2C {
 		 *
 		 */
 		virtual bool write_byte(Genode::uint8_t address,
-			Genode::uint8_t register, Genode::uint8_t in) = 0;
+		                        Genode::uint8_t register, Genode::uint8_t in) = 0;
 
 		/**
 		 * Read a multiple bytes from the device
@@ -61,9 +61,9 @@ namespace I2C {
 		 *
 		 */
 		virtual bool read(Genode::uint8_t address,
-			Genode::uint8_t register, Genode::uint8_t ralen,
-			Genode::uint8_t *out, Genode::uint8_t len) = 0;
-		
+		                  Genode::uint8_t register, Genode::uint8_t ralen,
+		                  Genode::uint8_t *out, Genode::uint8_t len) = 0;
+
 		/**
 		 * Write a multiple bytes to the device
 		 *
@@ -75,8 +75,8 @@ namespace I2C {
 		 *
 		 */
 		virtual bool write(Genode::uint8_t address,
-			Genode::uint8_t register, Genode::uint8_t ralen,
-			Genode::uint8_t *in, Genode::uint8_t len) = 0;
+		                   Genode::uint8_t register, Genode::uint8_t ralen,
+		                   Genode::uint8_t *in, Genode::uint8_t len) = 0;
 
 
 		/*********************
@@ -84,24 +84,23 @@ namespace I2C {
 		 *********************/
 
 		GENODE_RPC(Rpc_read_byte, bool, read_byte,
-			Genode::uint8_t, Genode::uint8_t, Genode::uint8_t*);
+		           Genode::uint8_t, Genode::uint8_t, Genode::uint8_t*);
 		GENODE_RPC(Rpc_write_byte, bool, write_byte,
-			Genode::uint8_t, Genode::uint8_t, Genode::uint8_t);
+		           Genode::uint8_t, Genode::uint8_t, Genode::uint8_t);
 		GENODE_RPC(Rpc_read, bool, read,
-			Genode::uint8_t, Genode::uint8_t, Genode::uint8_t,
-			Genode::uint8_t *, Genode::uint8_t);
+		           Genode::uint8_t, Genode::uint8_t, Genode::uint8_t,
+		           Genode::uint8_t *, Genode::uint8_t);
 		GENODE_RPC(Rpc_write, bool, write,
-			Genode::uint8_t, Genode::uint8_t, Genode::uint8_t,
-			Genode::uint8_t *, Genode::uint8_t);
-		GENODE_RPC(Rpc_dataspace, Genode::Dataspace_capability, dataspace);	
+		           Genode::uint8_t, Genode::uint8_t, Genode::uint8_t,
+		           Genode::uint8_t *, Genode::uint8_t);
+		GENODE_RPC(Rpc_dataspace, Genode::Dataspace_capability, dataspace);
 
 		GENODE_RPC_INTERFACE(
-			Rpc_read_byte,
-			Rpc_write_byte,
-			Rpc_read,
-			Rpc_write,
-			Rpc_dataspace
-		);
+		                     Rpc_read_byte,
+		                     Rpc_write_byte,
+		                     Rpc_read,
+		                     Rpc_write,
+		                     Rpc_dataspace);
 	};
 }
 

@@ -20,27 +20,20 @@
 #include <util/mmio.h>
 
 namespace I2C {
+
 	using namespace Genode;
 	class Imx53_I2C;
 }
 
 struct I2C::Imx53_I2C : Mmio
 {
-	enum { 
-		 I2SR_ICF      = (1 << 7),
-		 I2SR_IBB      = (1 << 5),
-		 I2SR_IAL      = (1 << 4),
-		 I2SR_IIF      = (1 << 1),
-		 I2SR_RX_NO_AK = (1 << 0),
-
-		 I2C_TIMEOUT   = 100,
-	};
+	enum { I2C_TIMEOUT   = 100 };
 
 	struct Iadr : Register<0x0, 8> { }; /* address register */
 	struct Ifdr : Register<0x4, 8> { }; /* frequency divider register */
-	
+
 	/* control register */
-	struct I2cr : Register<0x8, 8> 
+	struct I2cr : Register<0x8, 8>
 	{
 		struct Rsta : Bitfield<2, 1> { };
 		struct Txnoak : Bitfield<3, 1> { };
@@ -63,7 +56,6 @@ struct I2C::Imx53_I2C : Mmio
 
 	Timer::Connection _timer;
 
-
 	Imx53_I2C(Genode::addr_t const mmio_base) : Mmio(mmio_base)
 	{
 		/* Store divider value */
@@ -72,7 +64,7 @@ struct I2C::Imx53_I2C : Mmio
 		/* Rest module */
 		write<I2cr>(0);
 		write<I2sr>(0);
-		write<Iadr>(1<<1);	
+		write<Iadr>(1<<1);
 	}
 
 	~Imx53_I2C() {
@@ -82,7 +74,7 @@ struct I2C::Imx53_I2C : Mmio
 	bool wait_for_reg(uint8_t value)
 	{
 		int timeout = I2C_TIMEOUT;
-		
+
 		while ((read<REG>() != value) && (timeout--) > 0) {
 			if (read<I2sr::Ial>()) {
 				PERR("Arbitration lost I2sr:%x I2cr%x\n", read<I2sr>(), read<I2cr>());
@@ -93,7 +85,7 @@ struct I2C::Imx53_I2C : Mmio
 
 		if (timeout <= 0) {
 			PERR("timed out in wait_for_reg: I2sr=0x%x, reg=0x%x, value=0x%x\n",
-				   read<I2sr>(), read<REG>(), value);
+			     read<I2sr>(), read<REG>(), value);
 			return false;
 		}
 
@@ -105,7 +97,7 @@ struct I2C::Imx53_I2C : Mmio
 		write<I2sr>(0);
 		write<I2dr>(byte);
 
-		if(!wait_for_reg<I2sr::Iff>(1)) {
+		if (!wait_for_reg<I2sr::Iff>(1)) {
 			return false;
 		} else if (read<I2sr::Rxak>()) {
 			PERR("tx_byte failed");
@@ -124,9 +116,10 @@ struct I2C::Imx53_I2C : Mmio
 
 		/* Enable I2C */
 		if (!read<I2cr::Ien>()) {
-				write<I2cr::Ien>(1);
-				/* Wait for controller to be stable */
-				_timer.msleep(1);
+			write<I2cr::Ien>(1);
+
+			/* Wait for controller to be stable */
+			_timer.msleep(1);
 		}
 		if (!wait_for_reg<I2sr::Ibb>(0)) {
 			PERR("Wait for bus idle timeout\n");
@@ -135,6 +128,7 @@ struct I2C::Imx53_I2C : Mmio
 
 		/* Clear status register */
 		write<I2sr>(1);
+
 		/* Set master mode */
 		write<I2cr::Msta>(1);
 		if (!wait_for_reg<I2sr::Ibb>(1)) {
@@ -152,7 +146,7 @@ struct I2C::Imx53_I2C : Mmio
 
 		return tx_byte(addr & 0xff);
 	}
-		
+
 	void stop(void)
 	{
 		write<I2cr::Msta>(0);
@@ -162,7 +156,7 @@ struct I2C::Imx53_I2C : Mmio
 			PERR("Stop failed!\n");
 		}
 	}
-		
+
 
 	int i2c_read_byte(uint8_t chip, uint8_t addr, uint8_t *buffer)
 	{
@@ -176,7 +170,7 @@ struct I2C::Imx53_I2C : Mmio
 
 	int i2c_read(uint8_t chip, uint8_t addr, uint8_t alen, uint8_t *buffer, uint8_t len)
 	{
-		if(!init_tranfer(chip, addr, alen)) {
+		if (!init_tranfer(chip, addr, alen)) {
 			stop();
 			return -1;
 		}
@@ -185,7 +179,7 @@ struct I2C::Imx53_I2C : Mmio
 		write<I2cr::Rsta>(1);
 
 		if (!(tx_byte((chip << 1) | 1))) {
-			stop ();
+			stop();
 			return -1;
 		}
 
@@ -196,6 +190,7 @@ struct I2C::Imx53_I2C : Mmio
 		}
 
 		write<I2sr>(0);
+
 		/* Dummy read for clear ICF */
 		read<I2dr>();
 
@@ -226,7 +221,7 @@ struct I2C::Imx53_I2C : Mmio
 
 	int i2c_write(uint8_t chip, uint32_t addr, uint8_t alen, uint8_t *buffer, uint8_t len)
 	{
-		if(!init_tranfer(chip, addr, alen)) {
+		if (!init_tranfer(chip, addr, alen)) {
 			stop();
 			return -1;
 		}
@@ -246,4 +241,4 @@ struct I2C::Imx53_I2C : Mmio
 
 };
 
-#endif // _I2C_H_
+#endif /* _I2C_H_ */

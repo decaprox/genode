@@ -28,9 +28,10 @@
 #include "driver.h"
 
 namespace I2C {
+
 	using namespace Genode;
 	class Session_component;
-};
+}
 
 class I2C::Session_component : public Genode::Rpc_object<I2C::Session, Session_component>
 {
@@ -43,40 +44,39 @@ class I2C::Session_component : public Genode::Rpc_object<I2C::Session, Session_c
 
 	public:
 
-		Session_component(Driver &driver) 
+		Session_component(Driver &driver)
 		:
-		   	_driver(driver),
+			_driver(driver),
 			_io_buffer(env()->ram_session(), IO_BUFFER_SIZE)
-   		{ }
+		{ }
 
 		/************************************
 		 ** I2C::Session interface **
 		 ************************************/
 
-
 		virtual bool read_byte(Genode::uint8_t address,
-			Genode::uint8_t reg, Genode::uint8_t *out)
+		                       Genode::uint8_t reg, Genode::uint8_t *out)
 		{
 			return _driver.read_byte(address, reg, out);
 		}
 
 		virtual bool write_byte(Genode::uint8_t address,
-			Genode::uint8_t reg, Genode::uint8_t in)
+		                        Genode::uint8_t reg, Genode::uint8_t in)
 		{
 			return _driver.write_byte(address, reg, in);
 		}
 
 		virtual bool read(Genode::uint8_t address,
-			Genode::uint8_t reg, Genode::uint8_t ralen,
-		   	Genode::uint8_t *out, Genode::uint8_t len)
+		                  Genode::uint8_t reg, Genode::uint8_t ralen,
+		                  Genode::uint8_t *out, Genode::uint8_t len)
 		{
 			Genode::uint8_t *out_buf = _io_buffer.local_addr<uint8_t>();
 			return _driver.read(address, reg, ralen, out_buf, len);
 		}
 
 		virtual bool write(Genode::uint8_t address,
-			Genode::uint8_t reg, Genode::uint8_t ralen,
-			Genode::uint8_t* in, Genode::uint8_t len)
+		                   Genode::uint8_t reg, Genode::uint8_t ralen,
+		                   Genode::uint8_t* in, Genode::uint8_t len)
 		{
 			Genode::uint8_t *in_buf = _io_buffer.local_addr<uint8_t>();
 			return _driver.write(address, reg, ralen, in_buf, len);
@@ -96,7 +96,7 @@ int main(int, char **)
 	unsigned bus_number = 0;
 	config()->xml_node().attribute("bus_number").value(&bus_number);
 	PDBG("I2C Bus: %u", bus_number);
-	
+
 	static Driver driver(bus_number);
 
 	/*
