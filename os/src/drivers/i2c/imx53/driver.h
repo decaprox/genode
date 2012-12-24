@@ -86,30 +86,10 @@ public:
 			destroy(env()->heap(), _i2c_mmio);
 		}
 
-		bool read_byte(Genode::uint8_t address,	Genode::uint8_t reg,
-		               Genode::uint8_t *out)
-		{
-			if (_i2c->i2c_read_byte(address, reg, out) < 0) {
-				PERR("i.MX53 i2c: read_byte failed\n");
-				return false;
-			}
-			return true;
-		}
-
-		bool write_byte(Genode::uint8_t address, Genode::uint8_t reg,
-		                Genode::uint8_t in)
-		{
-			if (_i2c->i2c_write_byte(address, reg, &in) < 0) {
-				PERR("i.MX53 i2c: write_byte failed\n");
-				return false;
-			}
-			return true;
-		}
-
 		bool read(Genode::uint8_t address,	Genode::uint8_t reg,
-		          Genode::uint8_t ralen, Genode::uint8_t *out, Genode::uint8_t len)
+		          Genode::uint8_t *out, Genode::uint8_t len)
 		{
-			if (_i2c->i2c_read(address, reg, ralen, out, len) < 0) {
+			if (_i2c->i2c_read(address, reg, out, len) < 0) {
 				PERR("i.MX53 i2c: read failed\n");
 				return false;
 			}
@@ -117,9 +97,9 @@ public:
 		}
 
 		bool write(Genode::uint8_t address, Genode::uint8_t reg,
-		           Genode::uint8_t ralen, Genode::uint8_t *in, Genode::uint8_t len)
+		           Genode::uint8_t *in, Genode::uint8_t len)
 		{
-			if (_i2c->i2c_write(address, reg, ralen, in, len) < 0) {
+			if (_i2c->i2c_write(address, reg, in, len) < 0) {
 				PERR("i.MX53 i2c: write failed\n");
 				return false;
 			}

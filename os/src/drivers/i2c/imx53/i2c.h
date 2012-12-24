@@ -107,13 +107,8 @@ struct I2C::Imx53_I2C : Mmio
 		return true;
 	}
 
-	bool init_tranfer(uint8_t chip, uint8_t addr, uint8_t alen)
+	bool init_tranfer(uint8_t chip, uint8_t addr)
 	{
-		if (alen > 1) {
-			PERR("I2C: addr len %d not supported\n", alen);
-			return false;
-		}
-
 		/* Enable I2C */
 		if (!read<I2cr::Ien>()) {
 			write<I2cr::Ien>(1);
@@ -157,20 +152,9 @@ struct I2C::Imx53_I2C : Mmio
 		}
 	}
 
-
-	int i2c_read_byte(uint8_t chip, uint8_t addr, uint8_t *buffer)
+	int i2c_read(uint8_t chip, uint8_t addr, uint8_t *buffer, uint8_t len)
 	{
-		return i2c_read(chip, addr, 1, buffer, 1);
-	}
-
-	int i2c_write_byte(uint8_t chip, uint32_t addr, uint8_t *buffer)
-	{
-		return i2c_write(chip, addr, 1, buffer, 1);
-	}
-
-	int i2c_read(uint8_t chip, uint8_t addr, uint8_t alen, uint8_t *buffer, uint8_t len)
-	{
-		if (!init_tranfer(chip, addr, alen)) {
+		if (!init_tranfer(chip, addr)) {
 			stop();
 			return -1;
 		}
@@ -219,9 +203,9 @@ struct I2C::Imx53_I2C : Mmio
 		return 0;
 	}
 
-	int i2c_write(uint8_t chip, uint32_t addr, uint8_t alen, uint8_t *buffer, uint8_t len)
+	int i2c_write(uint8_t chip, uint8_t addr, uint8_t *buffer, uint8_t len)
 	{
-		if (!init_tranfer(chip, addr, alen)) {
+		if (!init_tranfer(chip, addr)) {
 			stop();
 			return -1;
 		}

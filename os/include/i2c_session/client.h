@@ -20,6 +20,7 @@
 #include <dataspace/capability.h>
 #include <base/rpc_client.h>
 #include <base/env.h>
+#include <base/printf.h>
 
 
 namespace I2C {
@@ -55,33 +56,32 @@ namespace I2C {
 				_io_buffer(call<Rpc_dataspace>())
 			{ }
 
-			bool read_byte(Genode::uint8_t address, Genode::uint8_t reg,
-			               Genode::uint8_t *out)
-			{
-				return call<Rpc_read_byte>(address, reg, out);
-			}
-
-			bool write_byte(Genode::uint8_t address, Genode::uint8_t reg,
-			                Genode::uint8_t in)
-			{
-				return call<Rpc_write_byte>(address, reg, in);
-			}
-
 			bool read(Genode::uint8_t address, Genode::uint8_t reg,
-			          Genode::uint8_t ralen, Genode::uint8_t *out, Genode::uint8_t len)
+			          Genode::uint8_t *out, Genode::size_t len)
 			{
-				bool res = call<Rpc_read>(address, reg, ralen, out, len);
+				if (len > _io_buffer.size) {
+					PERR("len (%d) exceeds the buffrer size (%d)", 
+					             len, _io_buffer.size);
+					return false;
+				}
+
+				bool res = call<Rpc_read>(address, reg, out, len);
 				Genode::memcpy(out, _io_buffer.base, len);
 
 				return res;
 			}
 
 			bool write(Genode::uint8_t address, Genode::uint8_t reg,
-			           Genode::uint8_t ralen, Genode::uint8_t *in, Genode::uint8_t len)
+			           Genode::uint8_t *in, Genode::size_t len)
 			{
-				Genode::memcpy(_io_buffer.base, in, len);
+				if (len > _io_buffer.size) {
+					PERR("len (%d) exceeds the buffrer size (%d)", 
+					             len, _io_buffer.size);
+					return false;
+				}
 
-				return call<Rpc_write>(address, reg, ralen, in, len);
+				Genode::memcpy(_io_buffer.base, in, len);
+				return call<Rpc_write>(address, reg, in, len);
 			}
 
 	};

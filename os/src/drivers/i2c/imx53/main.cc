@@ -54,32 +54,30 @@ class I2C::Session_component : public Genode::Rpc_object<I2C::Session, Session_c
 		 ** I2C::Session interface **
 		 ************************************/
 
-		virtual bool read_byte(Genode::uint8_t address,
-		                       Genode::uint8_t reg, Genode::uint8_t *out)
+		virtual bool read(Genode::uint8_t address, Genode::uint8_t reg,
+		                  Genode::uint8_t *out, Genode::size_t len)
 		{
-			return _driver.read_byte(address, reg, out);
-		}
+			if (len > IO_BUFFER_SIZE) {
+				PERR("len (%d) exceeds the buffrer size (%d)", len,
+				     IO_BUFFER_SIZE);
+				return false;
+			}
 
-		virtual bool write_byte(Genode::uint8_t address,
-		                        Genode::uint8_t reg, Genode::uint8_t in)
-		{
-			return _driver.write_byte(address, reg, in);
-		}
-
-		virtual bool read(Genode::uint8_t address,
-		                  Genode::uint8_t reg, Genode::uint8_t ralen,
-		                  Genode::uint8_t *out, Genode::uint8_t len)
-		{
 			Genode::uint8_t *out_buf = _io_buffer.local_addr<uint8_t>();
-			return _driver.read(address, reg, ralen, out_buf, len);
+			return _driver.read(address, reg, out_buf, len);
 		}
 
-		virtual bool write(Genode::uint8_t address,
-		                   Genode::uint8_t reg, Genode::uint8_t ralen,
-		                   Genode::uint8_t* in, Genode::uint8_t len)
+		virtual bool write(Genode::uint8_t address, Genode::uint8_t reg,
+		                   Genode::uint8_t* in, Genode::size_t len)
 		{
+			if (len > IO_BUFFER_SIZE) {
+				PERR("len (%d) exceeds the buffrer size (%d)", len,
+				     IO_BUFFER_SIZE);
+				return false;
+			}
+
 			Genode::uint8_t *in_buf = _io_buffer.local_addr<uint8_t>();
-			return _driver.write(address, reg, ralen, in_buf, len);
+			return _driver.write(address, reg, in_buf, len);
 		}
 
 		Dataspace_capability dataspace(void) { return _io_buffer.cap(); }

@@ -29,76 +29,41 @@ namespace I2C {
 		virtual ~Session() { }
 
 		/**
-		 * Read a single byte from the device
-		 *
-		 * \param address the address of the device on the bus
-		 * \param register the register to read
-		 * \param out the destination to put data
-		 *
-		 */
-		virtual bool read_byte(Genode::uint8_t address,
-		                       Genode::uint8_t register, Genode::uint8_t *out) = 0;
-
-		/**
-		 * Write a single byte to the device
-		 *
-		 * \param address the address of the device on the bus
-		 * \param register the register to read
-		 * \param in the value to write
-		 *
-		 */
-		virtual bool write_byte(Genode::uint8_t address,
-		                        Genode::uint8_t register, Genode::uint8_t in) = 0;
-
-		/**
 		 * Read a multiple bytes from the device
 		 *
-		 * \param address the address of the device on the bus
+		 * \param address  the address of the device on the bus
 		 * \param register the register to read
-		 * \param register address length
-		 * \param out the destination to put data
-		 * \param register length
+		 * \param out      the destination to put data
+		 * \param len      number of a bytes to read
 		 *
 		 */
-		virtual bool read(Genode::uint8_t address,
-		                  Genode::uint8_t register, Genode::uint8_t ralen,
-		                  Genode::uint8_t *out, Genode::uint8_t len) = 0;
+		virtual bool read(Genode::uint8_t address, Genode::uint8_t register,
+		                  Genode::uint8_t *out, Genode::size_t len) = 0;
 
 		/**
 		 * Write a multiple bytes to the device
 		 *
-		 * \param address the address of the device on the bus
+		 * \param address  the address of the device on the bus
 		 * \param register the register to read
-		 * \param register address length
-		 * \param in the value to write
-		 * \param register length
+		 * \param in       the value to write
+		 * \param len      number of a bytes to write
 		 *
 		 */
-		virtual bool write(Genode::uint8_t address,
-		                   Genode::uint8_t register, Genode::uint8_t ralen,
-		                   Genode::uint8_t *in, Genode::uint8_t len) = 0;
+		virtual bool write(Genode::uint8_t address, Genode::uint8_t register,
+		                   Genode::uint8_t *in, Genode::size_t len) = 0;
 
 
 		/*********************
 		 ** RPC declaration **
 		 *********************/
 
-		GENODE_RPC(Rpc_read_byte, bool, read_byte,
-		           Genode::uint8_t, Genode::uint8_t, Genode::uint8_t*);
-		GENODE_RPC(Rpc_write_byte, bool, write_byte,
-		           Genode::uint8_t, Genode::uint8_t, Genode::uint8_t);
-		GENODE_RPC(Rpc_read, bool, read,
-		           Genode::uint8_t, Genode::uint8_t, Genode::uint8_t,
-		           Genode::uint8_t *, Genode::uint8_t);
-		GENODE_RPC(Rpc_write, bool, write,
-		           Genode::uint8_t, Genode::uint8_t, Genode::uint8_t,
-		           Genode::uint8_t *, Genode::uint8_t);
+		GENODE_RPC(Rpc_read, bool, read, Genode::uint8_t, Genode::uint8_t, 
+		           Genode::uint8_t *, Genode::size_t);
+		GENODE_RPC(Rpc_write, bool, write, Genode::uint8_t, Genode::uint8_t,
+		           Genode::uint8_t *, Genode::size_t);
 		GENODE_RPC(Rpc_dataspace, Genode::Dataspace_capability, dataspace);
 
-		GENODE_RPC_INTERFACE(
-		                     Rpc_read_byte,
-		                     Rpc_write_byte,
-		                     Rpc_read,
+		GENODE_RPC_INTERFACE(Rpc_read,
 		                     Rpc_write,
 		                     Rpc_dataspace);
 	};
