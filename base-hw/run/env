@@ -58,6 +58,13 @@ proc create_boot_directory { } {
 }
 
 
+proc entrypoint { } {
+	 global _entrypoint
+	 set _entrypoint [exec readelf -h bin/core | grep Entry | sed -e "s/.*Entry point address: *//"]
+	 return $_entrypoint
+}
+
+
 proc build_boot_image {binaries} {
 
 	# strip binaries
