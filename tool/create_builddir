@@ -41,6 +41,7 @@ usage:
 	@echo "                  'foc_vea9x4'"
 	@echo "                  'foc_panda'"
 	@echo "                  'foc_arndale'"
+	@echo "                  'foc_am33xx'"
 	@echo "                  'lx_hybrid_x86'"
 	@echo
 	@echo "  <build-dir>  is the location of the build directory to create"
@@ -186,6 +187,9 @@ foc_imx53::
 
 foc_arndale::
 	@echo "SPECS = genode foc_arndale" > $(BUILD_DIR)/etc/specs.conf
+
+foc_am33xx::
+	@echo "SPECS = genode foc_am33xx" > $(BUILD_DIR)/etc/specs.conf
 
 codezero_vpb926::
 	@echo "CODEZERO_DIR = $(GENODE_DIR)/base-codezero/contrib" > $(BUILD_DIR)/etc/codezero.conf
