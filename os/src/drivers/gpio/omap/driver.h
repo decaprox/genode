@@ -1,5 +1,5 @@
 /*
- * \brief  Gpio driver for the OMAP4
+ * \brief  Gpio driver for the OMAP
  * \author Ivan Loskutov <ivan.loskutov@ksyslabs.org>
  * \author Stefan Kalkowski <stefan.kalkowski@genode-labs.com>
  * \date   2012-06-23
@@ -28,13 +28,13 @@
 static int verbose = 0;
 
 
-class Omap4_driver : public Gpio::Driver
+class Omap_driver : public Gpio::Driver
 {
 	private:
 
 		enum {
-			MAX_BANKS = 6,
-			MAX_PINS  = 32
+			GPIO_BANKS = Genode::Board_base::GPIO_BANKS,
+			GPIO_PINS  = Genode::Board_base::GPIO_PINS
 		};
 
 
@@ -53,8 +53,8 @@ class Omap4_driver : public Gpio::Driver
 
 				Gpio_reg                          _reg;
 				Genode::Irq_connection            _irq;
-				Genode::Signal_context_capability _sig_cap[MAX_PINS];
-				bool                              _irq_enabled[MAX_PINS];
+				Genode::Signal_context_capability _sig_cap[GPIO_BANKS];
+				bool                              _irq_enabled[GPIO_PINS];
 
 			public:
 
@@ -63,7 +63,7 @@ class Omap4_driver : public Gpio::Driver
 				: Genode::Thread<4096>("irq handler"),
 				  _reg(base, size), _irq(irq)
 				{
-					for (unsigned i = 0; i < MAX_PINS; i++)
+					for (unsigned i = 0; i < GPIO_PINS; i++)
 						_irq_enabled[i] = false;
 					start();
 				}
@@ -79,7 +79,7 @@ class Omap4_driver : public Gpio::Driver
 
 						status = _reg.read<Gpio_reg::Irqstatus_0>();
 
-						for(unsigned i = 0; i < MAX_PINS; i++) {
+						for(unsigned i = 0; i < GPIO_PINS; i++) {
 							if ((status & (1 << i)) && _irq_enabled[i] &&
 							    _sig_cap[i].valid())
 								Genode::Signal_transmitter(_sig_cap[i]).submit();
@@ -105,14 +105,14 @@ class Omap4_driver : public Gpio::Driver
 		};
 
 
-		static Gpio_bank _gpio_bank[MAX_BANKS];
+		static Gpio_bank _gpio_bank[GPIO_BANKS];
 
 		int _gpio_bank_index(int gpio)  { return gpio >> 5;   }
 		int _gpio_index(int gpio)       { return gpio & 0x1f; }
 
-		Omap4_driver()
+		Omap_driver()
 		{
-			for (int i = 0; i < MAX_BANKS; ++i) {
+			for (int i = 0; i < GPIO_BANKS; ++i) {
 				if (verbose)
 					PDBG("GPIO%d ctrl=%08x",
 						 i+1, _gpio_bank[i].regs()->read<Gpio_reg::Ctrl>());
@@ -121,9 +121,7 @@ class Omap4_driver : public Gpio::Driver
 
 	public:
 
-		static Omap4_driver& factory();
-
-
+		static Omap_driver& factory();
 		/******************************
 		 **  Gpio::Driver interface  **
 		 ******************************/
@@ -248,35 +246,12 @@ class Omap4_driver : public Gpio::Driver
 			_gpio_bank[_gpio_bank_index(gpio)].sigh(_gpio_index(gpio), cap);
 		}
 
-		bool gpio_valid(unsigned gpio) { return gpio < (MAX_PINS*MAX_BANKS); }
+		bool gpio_valid(unsigned gpio) { return gpio < (GPIO_PINS*GPIO_BANKS); }
 };
 
-
-Omap4_driver::Gpio_bank Omap4_driver::_gpio_bank[Omap4_driver::MAX_BANKS] = {
-	Gpio_bank(Genode::Board_base::GPIO1_MMIO_BASE,
-	          Genode::Board_base::GPIO1_MMIO_SIZE,
-	          Genode::Board_base::GPIO1_IRQ),
-	Gpio_bank(Genode::Board_base::GPIO2_MMIO_BASE,
-	          Genode::Board_base::GPIO2_MMIO_SIZE,
-	          Genode::Board_base::GPIO2_IRQ),
-	Gpio_bank(Genode::Board_base::GPIO3_MMIO_BASE,
-	          Genode::Board_base::GPIO3_MMIO_SIZE,
-	          Genode::Board_base::GPIO3_IRQ),
-	Gpio_bank(Genode::Board_base::GPIO4_MMIO_BASE,
-	          Genode::Board_base::GPIO4_MMIO_SIZE,
-	          Genode::Board_base::GPIO4_IRQ),
-	Gpio_bank(Genode::Board_base::GPIO5_MMIO_BASE,
-	          Genode::Board_base::GPIO5_MMIO_SIZE,
-	          Genode::Board_base::GPIO5_IRQ),
-	Gpio_bank(Genode::Board_base::GPIO6_MMIO_BASE,
-	          Genode::Board_base::GPIO6_MMIO_SIZE,
-	          Genode::Board_base::GPIO6_IRQ),
-};
-
-
-Omap4_driver& Omap4_driver::factory()
+Omap_driver& Omap_driver::factory()
 {
-	static Omap4_driver driver;
+	static Omap_driver driver;
 	return driver;
 }
 

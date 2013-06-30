@@ -65,6 +65,8 @@ namespace Genode
 			HDMI_MMIO_SIZE  = 0x00001000,
 
 			/* GPIO */
+			GPIO_BANKS      = 6,
+			GPIO_PINS       = 32,
 			GPIO1_MMIO_BASE = 0x4a310000,
 			GPIO1_MMIO_SIZE = 0x1000,
 			GPIO1_IRQ       = 29 + 32,
