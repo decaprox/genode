@@ -70,7 +70,15 @@ struct Imx6::Board_base
 		/* CSU */
 		CSU_BASE           = 0x021c0000,
 		CSU_SIZE           = 0x00001000,
-
+		
+		/*Io-Muxc */
+		IOMUXC_BASE        = 0x20e0000,
+		IOMUXC_SIZE        = 0x00004000,
+		
+		/* TrustZone Address Space Controller */
+		TZASC_BASE           = 0x021d0000,
+		TZASC_SIZE           = 0x00001000,
+		
 		/* CPU */
 		CORTEX_A9_PRIVATE_MEM_BASE  = 0x00a00000,
 		CORTEX_A9_PRIVATE_MEM_SIZE  = 0x00002000,
